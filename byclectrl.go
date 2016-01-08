@@ -277,8 +277,14 @@ func type_func(w http.ResponseWriter, r *http.Request) { /*  http://202.127.26.2
 		return
 	}
 
-	sql := ""
+	var sql string
+	if typeid == "-1" {
+		sql = "select dicword_wordid , dicword_wordname where dicword_dictypeid = 6"
+	} else {
+		sql = "select dicword_wordid , dicword_wordname where dicword_dictypeid = 6 and dicword_wordid = " + typeid
+	}
 	res, err := db.Start(sql)
+
 	if err != nil {
 		typeret.Status = "1000"
 		glog.V(3).Infoln("处理失败")
@@ -287,7 +293,30 @@ func type_func(w http.ResponseWriter, r *http.Request) { /*  http://202.127.26.2
 	} else {
 
 		typeret.Status = "1" //处理成功
+
+		var typedata TYPEARRAY
+		var typedatas []TYPEARRAY
+		for {
+			row, err := res.GetRow()
+			if err != nil {
+				typedata.Status = "1000"
+				glog.V(3).Infoln("处理失败")
+				w.Write("{status:'1000',data:[] }")
+				return
+			}
+
+			if row == nil {
+				// No more rows
+				break
+			}
+			typedata.Type_id = row.Str(res.Map("dicword_wordid"))
+			typedata.Type_name = row.Str(res.Map("dicword_wordname"))
+
+			typedatas = append(typedatas, typedata)
+		}
+
 	}
+	typeret.Data = typedatas
 	b, err := json.Marshal(typeret)
 	if err != nil {
 		glog.V(3).Infoln("statusret 转json 出错")
@@ -337,7 +366,12 @@ func color_func(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.2
 		return
 	}
 
-	sql := ""
+	var sql string
+	if colorid == "-1" {
+		sql = "select dicword_wordid , dicword_wordname where dicword_dictypeid = 7"
+	} else {
+		sql = "select dicword_wordid , dicword_wordname where dicword_dictypeid = 7 and dicword_wordid = " + colorid
+	}
 	res, err := db.Start(sql)
 	if err != nil {
 		colorret.Status = "1000"
@@ -347,7 +381,30 @@ func color_func(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.2
 	} else {
 
 		colorret.Status = "1" //处理成功
+
+		var colordata COLORARRAY
+		var colordatas []COLORARRAY
+		for {
+			row, err := res.GetRow()
+			if err != nil {
+				colordata.Status = "1000"
+				glog.V(3).Infoln("处理失败")
+				w.Write("{status:'1000',data:[] }")
+				return
+			}
+
+			if row == nil {
+				// No more rows
+				break
+			}
+			colordata.Color_id = row.Str(res.Map("dicword_wordid"))
+			colordata.Color_name = row.Str(res.Map("dicword_wordname"))
+
+			colordatas = append(colordatas, colordata)
+		}
+
 	}
+	colorret.Data = colordatas
 	b, err := json.Marshal(colorret)
 	if err != nil {
 		glog.V(3).Infoln("statusret 转json 出错")
