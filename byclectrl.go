@@ -1,10 +1,11 @@
 package main
 
 import (
-	"bytes"
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"os/exec"
+	"strings"
 	"time"
 	//"crypto/aes"
 	//"crypto/cipher"
@@ -36,13 +37,16 @@ func opendb() mysql.Conn {
 		glog.Errorln("数据库无法连接")
 		return nil
 	}
+	db.Query("set names utf8")
 	return db
 
 }
 func GetMd5String(s string) string {
 	h := md5.New()
 	h.Write([]byte(s))
-	return hex.EncodeToString(h.Sum(nil))
+	ret := hex.EncodeToString(h.Sum(nil))
+	fmt.Println(ret)
+	return ret
 }
 
 func cmp_md5(str string, sig string) bool {
@@ -108,7 +112,15 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 	if len(tagid) <= 0 || len(areaid) <= 0 || len(hphm) <= 0 || len(name) <= 0 || len(sign) <= 0 {
 		statusret.Status = "1003"
 		glog.V(3).Infoln("请求参数缺失")
-		w.Write("{status:'1003'}")
+		w.Write([]byte("{status:'1003'}"))
+		return
+	}
+
+	str := fmt.Sprintf("tagid=%s&areaid=%s&hphm=%s&name=%s&key=%s", tagid, areaid, hphm, name, md5key)
+	if cmp_md5(str, sign) != true {
+		statusret.Status = "1002"
+		glog.V(3).Infoln("sign验证失败")
+		w.Write([]byte("{status:'1002'}"))
 		return
 	}
 
@@ -116,26 +128,19 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 	if db == nil {
 		statusret.Status = "-1"
 		glog.V(3).Infoln("系统繁忙，稍后再试")
-		w.Write("{status:'-1'}")
+		w.Write([]byte("{status:'-1'}"))
 		return
 	} else {
 		defer db.Close()
 	}
-	str := fmt.Sprintf("tagid=%s&areaid=%s&hphm=%s&name=%s&key=%s", tagid, areaid, hphm, name, md5key)
-	if cmp_md5(str, sign) != true {
-		statusret.Status = "1002"
-		glog.V(3).Infoln("sign验证失败")
-		w.Write("{status:'1002'}")
-		return
-	}
 
 	sql := `insert into tag_tb(tag_tagid, tag_state) values("%s",1) `
 	sql = fmt.Sprintf(sql, tagid)
-	res, err := db.Start(sql)
+	_, err := db.Start(sql)
 	if err != nil {
 		statusret.Status = "1000"
-		glog.V(3).Infoln("处理失败")
-		w.Write("{status:'1000'}")
+		glog.V(3).Infoln("into tag_tb处理失败")
+		w.Write([]byte("{status:'1000'}"))
 		return
 	} else {
 
@@ -144,11 +149,11 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 	sql = `insert into moped_tb(moped_hphm,moped_type,moped_pic,moped_vin,moped_colorid,area_id) 
 	     values("%s",%s,"%s","%s",%s,%s) `
 	sql = fmt.Sprintf(sql, hphm, typeid, pic, vin, colorid, areaid)
-	res, err := db.Start(sql)
+	_, err = db.Start(sql)
 	if err != nil {
 		statusret.Status = "1000"
-		glog.V(3).Infoln("处理失败")
-		w.Write("{status:'1000'}")
+		glog.V(3).Infoln("into moped_tb处理失败")
+		w.Write([]byte("{status:'1000'}"))
 		return
 	} else {
 
@@ -158,11 +163,11 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 	sql = `insert into owner_tb(owner_name,owner_phone,owner_address,owner_photo,owner_SID,area_id) 
 	     values("%s","%s","%s","%s","%s",%s) `
 	sql = fmt.Sprintf(sql, name, phone, address, photo, SID, areaid)
-	res, err := db.Start(sql)
+	_, err = db.Start(sql)
 	if err != nil {
 		statusret.Status = "1000"
-		glog.V(3).Infoln("处理失败")
-		w.Write("{status:'1000'}")
+		glog.V(3).Infoln("into owner_tb处理失败")
+		w.Write([]byte("{status:'1000'}"))
 		return
 	} else {
 
@@ -171,12 +176,12 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 
 	sql = `insert into mopedtag_tb(moped_id,tag_id,mopedtag_datetime,mopedtag_state) 
 	     select moped_tb.moped_id,tag_tb.tag_id,"%s",1 from moped_tb join tag_tb where moped_tb.moped_hphm = "%s" and tag_tb.tag_tagid = "%s" `
-	sql = fmt.Sprintf(sql, time.Now(), hphm.tagid)
-	res, err := db.Start(sql)
+	sql = fmt.Sprintf(sql, time.Now().Format("2006-01-02 15:04:05"), hphm, tagid)
+	_, err = db.Start(sql)
 	if err != nil {
 		statusret.Status = "1000"
-		glog.V(3).Infoln("处理失败")
-		w.Write("{status:'1000'}")
+		glog.V(3).Infoln("into mopedtag_tb处理失败")
+		w.Write([]byte("{status:'1000'}"))
 		return
 	} else {
 
@@ -185,12 +190,12 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 
 	sql = `insert into mopedowner_tb(moped_id,owner_id,mopedowner_datetime,mopedowner_state) 
 	     select moped_tb.moped_id,owner_tb.owner_id,"%s",1 from moped_tb join owner_tb where moped_tb.moped_hphm = "%s" and owner_tb.owner_name = "%s" `
-	sql = fmt.Sprintf(sql, time.Now(), hphm, name)
-	res, err := db.Start(sql)
+	sql = fmt.Sprintf(sql, time.Now().Format("2006-01-02 15:04:05"), hphm, name)
+	_, err = db.Start(sql)
 	if err != nil {
 		statusret.Status = "1000"
-		glog.V(3).Infoln("处理失败")
-		w.Write("{status:'1000'}")
+		glog.V(3).Infoln("into mopedowner_tb处理失败")
+		w.Write([]byte("{status:'1000'}"))
 		return
 	} else {
 
@@ -200,7 +205,7 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 	b, err := json.Marshal(statusret)
 	if err != nil {
 		glog.V(3).Infoln("statusret 转json 出错")
-		w.Write("{status:1000}")
+		w.Write([]byte("{status:1000}"))
 		return
 
 	}
@@ -217,7 +222,6 @@ type AREADATA struct {
 type AREARET struct {
 	Status string
 	Data   []AREADATA
-	Info   string
 }
 
 func area_func(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.252/XXX/area   */
@@ -228,24 +232,26 @@ func area_func(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.25
 	if len(areaid) <= 0 || len(sign) <= 0 {
 		arearet.Status = "1003"
 		glog.V(3).Infoln("请求参数缺失")
-		w.Write("{status:'1003',data:[],info:''}")
+		w.Write([]byte("{status:'1003',data:[]}"))
 		return
 	}
-	db := opendb()
-	if db == nil {
-		arearet.Status = "-1"
-		glog.V(3).Infoln("系统繁忙，稍后再试")
-		w.Write("{status:'-1',data:[],info:''}")
-		return
-	} else {
-		defer db.Close()
-	}
+
 	str := fmt.Sprintf("areaid=%s&key=%s", areaid, md5key)
 	if cmp_md5(str, sign) != true {
 		arearet.Status = "1002"
 		glog.V(3).Infoln("sign验证失败")
-		w.Write("{status:'1002',data:[],info:''}")
+		w.Write([]byte("{status:'1002',data:[] }"))
 		return
+	}
+
+	db := opendb()
+	if db == nil {
+		arearet.Status = "-1"
+		glog.V(3).Infoln("系统繁忙，稍后再试")
+		w.Write([]byte("{status:'-1',data:[] }"))
+		return
+	} else {
+		defer db.Close()
 	}
 	var sql string
 	if areaid == "-1" {
@@ -254,22 +260,23 @@ func area_func(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.25
 		sql = "select area_id ,area_name from area_tb where area_id = " + areaid
 	}
 	res, err := db.Start(sql)
+	var areadata AREADATA
+	var areadatas []AREADATA
 	if err != nil {
 		arearet.Status = "1000"
 		glog.V(3).Infoln("处理失败")
-		w.Write("{status:'1000',data:[],info:''}")
+		w.Write([]byte("{status:'1000',data:[] }"))
 		return
 	} else {
 
 		arearet.Status = "1" //处理成功
-		var areadata AREADATA
-		var areadatas []AREADATA
+
 		for {
 			row, err := res.GetRow()
 			if err != nil {
 				arearet.Status = "1000"
 				glog.V(3).Infoln("处理失败")
-				w.Write("{status:'1000',data:[],info:''}")
+				w.Write([]byte("{status:'1000',data:[] '}"))
 				return
 			}
 
@@ -279,7 +286,7 @@ func area_func(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.25
 			}
 			areadata.Area_id = row.Str(res.Map("area_id"))
 			areadata.Area_name = row.Str(res.Map("area_name"))
-
+			fmt.Println(areadata.Area_name)
 			areadatas = append(areadatas, areadata)
 		}
 
@@ -288,7 +295,7 @@ func area_func(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.25
 	b, err := json.Marshal(arearet)
 	if err != nil {
 		glog.V(3).Infoln("statusret 转json 出错")
-		w.Write("{status:1000},data:[],info:''}")
+		w.Write([]byte("{status:1000},data:[] }"))
 		return
 
 	}
@@ -309,57 +316,57 @@ type TYPERET struct {
 
 func type_func(w http.ResponseWriter, r *http.Request) { /*  http://202.127.26.252/XXX/type   */
 	r.ParseForm()
-	typeid := r.FormValue("areaid")
+	typeid := r.FormValue("typeid")
 	sign := r.FormValue("sign")
 	var typeret TYPERET
 	if len(typeid) <= 0 || len(sign) <= 0 {
 		typeret.Status = "1003"
 		glog.V(3).Infoln("请求参数缺失")
-		w.Write("{status:'1003',data:[] }")
+		w.Write([]byte("{status:'1003',data:[] }"))
 		return
 	}
-	db := opendb()
-	if db == nil {
-		typeret.Status = "-1"
-		glog.V(3).Infoln("系统繁忙，稍后再试")
-		w.Write("{status:'-1',data:[] }")
-		return
-	} else {
-		defer db.Close()
-	}
+
 	str := fmt.Sprintf("typeid=%s&key=%s", typeid, md5key)
 	if cmp_md5(str, sign) != true {
 		typeret.Status = "1002"
 		glog.V(3).Infoln("sign验证失败")
-		w.Write("{status:'1002',data:[] }")
+		w.Write([]byte("{status:'1002',data:[] }"))
 		return
 	}
 
+	db := opendb()
+	if db == nil {
+		typeret.Status = "-1"
+		glog.V(3).Infoln("系统繁忙，稍后再试")
+		w.Write([]byte("{status:'-1',data:[] }"))
+		return
+	} else {
+		defer db.Close()
+	}
 	var sql string
 	if typeid == "-1" {
-		sql = "select dicword_wordid , dicword_wordname where dicword_dictypeid = 6"
+		sql = "select dicword_wordid , dicword_wordname FROM dicword_tb where dicword_dictypeid = 6"
 	} else {
-		sql = "select dicword_wordid , dicword_wordname where dicword_dictypeid = 6 and dicword_wordid = " + typeid
+		sql = "select dicword_wordid , dicword_wordname FROM dicword_tb where dicword_dictypeid = 6 and dicword_wordid = " + typeid
 	}
 	res, err := db.Start(sql)
-
+	var typedata TYPEARRAY
+	var typedatas []TYPEARRAY
 	if err != nil {
 		typeret.Status = "1000"
 		glog.V(3).Infoln("处理失败")
-		w.Write("{status:'1000',data:[] }")
+		w.Write([]byte("{status:'1000',data:[] }"))
 		return
 	} else {
 
 		typeret.Status = "1" //处理成功
 
-		var typedata TYPEARRAY
-		var typedatas []TYPEARRAY
 		for {
 			row, err := res.GetRow()
 			if err != nil {
-				typedata.Status = "1000"
+				typeret.Status = "1000"
 				glog.V(3).Infoln("处理失败")
-				w.Write("{status:'1000',data:[] }")
+				w.Write([]byte("{status:'1000',data:[] }"))
 				return
 			}
 
@@ -378,7 +385,7 @@ func type_func(w http.ResponseWriter, r *http.Request) { /*  http://202.127.26.2
 	b, err := json.Marshal(typeret)
 	if err != nil {
 		glog.V(3).Infoln("statusret 转json 出错")
-		w.Write("{status:1000},data:[] }")
+		w.Write([]byte("{status:1000},data:[] }"))
 		return
 
 	}
@@ -404,50 +411,51 @@ func color_func(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.2
 	if len(colorid) <= 0 || len(sign) <= 0 {
 		colorret.Status = "1003"
 		glog.V(3).Infoln("请求参数缺失")
-		w.Write("{status:'1003',data:[] }")
+		w.Write([]byte("{status:'1003',data:[] }"))
 		return
 	}
-	db := opendb()
-	if db == nil {
-		colorret.Status = "-1"
-		glog.V(3).Infoln("系统繁忙，稍后再试")
-		w.Write("{status:'-1',data:[] }")
-		return
-	} else {
-		defer db.Close()
-	}
+
 	str := fmt.Sprintf("colorid=%s&key=%s", colorid, md5key)
 	if cmp_md5(str, sign) != true {
 		colorret.Status = "1002"
 		glog.V(3).Infoln("sign验证失败")
-		w.Write("{status:'1002',data:[] }")
+		w.Write([]byte("{status:'1002',data:[] }"))
 		return
 	}
 
+	db := opendb()
+	if db == nil {
+		colorret.Status = "-1"
+		glog.V(3).Infoln("系统繁忙，稍后再试")
+		w.Write([]byte("{status:'-1',data:[] }"))
+		return
+	} else {
+		defer db.Close()
+	}
 	var sql string
 	if colorid == "-1" {
-		sql = "select dicword_wordid , dicword_wordname where dicword_dictypeid = 7"
+		sql = "select dicword_wordid , dicword_wordname FROM dicword_tb where dicword_dictypeid = 7"
 	} else {
-		sql = "select dicword_wordid , dicword_wordname where dicword_dictypeid = 7 and dicword_wordid = " + colorid
+		sql = "select dicword_wordid , dicword_wordname FROM dicword_tb where dicword_dictypeid = 7 and dicword_wordid = " + colorid
 	}
 	res, err := db.Start(sql)
+	var colordata COLORARRAY
+	var colordatas []COLORARRAY
 	if err != nil {
 		colorret.Status = "1000"
 		glog.V(3).Infoln("处理失败")
-		w.Write("{status:'1000',data:[] }")
+		w.Write([]byte("{status:'1000',data:[] }"))
 		return
 	} else {
 
 		colorret.Status = "1" //处理成功
 
-		var colordata COLORARRAY
-		var colordatas []COLORARRAY
 		for {
 			row, err := res.GetRow()
 			if err != nil {
-				colordata.Status = "1000"
+				colorret.Status = "1000"
 				glog.V(3).Infoln("处理失败")
-				w.Write("{status:'1000',data:[] }")
+				w.Write([]byte("{status:'1000',data:[] }"))
 				return
 			}
 
@@ -466,7 +474,7 @@ func color_func(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.2
 	b, err := json.Marshal(colorret)
 	if err != nil {
 		glog.V(3).Infoln("statusret 转json 出错")
-		w.Write("{status:1000},data:[] }")
+		w.Write([]byte("{status:1000},data:[] }"))
 		return
 
 	}
@@ -507,28 +515,29 @@ func get_moped(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.25
 	if len(areaid) <= 0 || len(sign) <= 0 || len(typeid) <= 0 || len(colorid) <= 0 {
 		mopedret.Status = "1003"
 		glog.V(3).Infoln("请求参数缺失")
-		w.Write("{status:'1003',data:[] }")
+		w.Write([]byte("{status:'1003',data:[] }"))
 		return
 	}
-	db := opendb()
-	if db == nil {
-		mopedret.Status = "-1"
-		glog.V(3).Infoln("系统繁忙，稍后再试")
-		w.Write("{status:'-1',data:[] }")
-		return
-	} else {
-		defer db.Close()
-	}
+
 	str := fmt.Sprintf("areaid=%s&hphm=%s&typeid=%s&colorid=%s&name=%s&key=%s", areaid, hphm, typeid, colorid, name, md5key)
 	if cmp_md5(str, sign) != true {
 		mopedret.Status = "1002"
 		glog.V(3).Infoln("sign验证失败")
-		w.Write("{status:'1002',data:[] }")
+		w.Write([]byte("{status:'1002',data:[] }"))
 		return
 	}
 
-	sql := `SELECT area_tb.area_id, area_tb.area_name ,moped_tb.moped_hphm , 
-			type1_tb.dicword_wordname ,color1_tb.dicword_wordname ,owner_tb.owner_name ,
+	db := opendb()
+	if db == nil {
+		mopedret.Status = "-1"
+		glog.V(3).Infoln("系统繁忙，稍后再试")
+		w.Write([]byte("{status:'-1',data:[] }"))
+		return
+	} else {
+		defer db.Close()
+	}
+	sql := `SELECT  DISTINCT area_tb.area_id, area_tb.area_name ,moped_tb.moped_hphm , 
+			type1_tb.dicword_wordname as typetype,color1_tb.dicword_wordname  ,owner_tb.owner_name ,
 			owner_tb.owner_phone,owner_tb.owner_SID, owner_tb.owner_address,tag_tb.tag_tagid,tag_tb.tag_state 
 			FROM owner_tb  JOIN moped_tb JOIN tag_tb   JOIN mopedowner_tb  
 			ON moped_tb.moped_id = moped_tb.moped_id AND  mopedowner_tb.owner_id = owner_tb.owner_id  
@@ -557,24 +566,25 @@ func get_moped(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.25
 	}
 
 	sql = sql + " 1=1 "
+
 	res, err := db.Start(sql)
+	var mopeddata MOPEDARRAY
+	var mopeddatas []MOPEDARRAY
 	if err != nil {
 		mopedret.Status = "1000"
 		glog.V(3).Infoln("处理失败")
-		w.Write("{status:'1000',data:[] }")
+		w.Write([]byte("{status:'1000',data:[] }"))
 		return
 	} else {
 
 		mopedret.Status = "1" //处理成功
 
-		var mopeddata MOPEDARRAY
-		var mopeddatas []MOPEDARRAY
 		for {
 			row, err := res.GetRow()
 			if err != nil {
-				mopeddata.Status = "1000"
+				mopedret.Status = "1000"
 				glog.V(3).Infoln("处理失败")
-				w.Write("{status:'1000',data:[] }")
+				w.Write([]byte("{status:'1000',data:[] }"))
 				return
 			}
 
@@ -585,7 +595,7 @@ func get_moped(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.25
 			mopeddata.Areaid = row.Str(res.Map("area_id"))
 			mopeddata.Areaname = row.Str(res.Map("area_name"))
 			mopeddata.Hphm = row.Str(res.Map("moped_hphm"))
-			mopeddata.Typetype = row.Str(res.Map("dicword_wordname"))
+			mopeddata.Typetype = row.Str(res.Map("typetype"))
 			mopeddata.Color = row.Str(res.Map("dicword_wordname"))
 			mopeddata.Name = row.Str(res.Map("owner_name"))
 			mopeddata.Phone = row.Str(res.Map("owner_phone"))
@@ -601,7 +611,7 @@ func get_moped(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.25
 	b, err := json.Marshal(mopedret)
 	if err != nil {
 		glog.V(3).Infoln("statusret 转json 出错")
-		w.Write("{status:1000},data:[] }")
+		w.Write([]byte("{status:1000},data:[] }"))
 		return
 
 	}
@@ -626,48 +636,51 @@ func Upt_tagstate(w http.ResponseWriter, r *http.Request) { /* http://202.127.26
 	if len(hphm) <= 0 || len(tagid) <= 0 || len(state) <= 0 || len(sign) <= 0 {
 		tagstateret.Status = "1003"
 		glog.V(3).Infoln("请求参数缺失")
-		w.Write("{status:'1003'  }")
+		w.Write([]byte("{status:'1003'  }"))
 		return
 	}
-	db := opendb()
-	if db == nil {
-		tagstateret.Status = "-1"
-		glog.V(3).Infoln("系统繁忙，稍后再试")
-		w.Write("{status:'-1'  }")
-		return
-	} else {
-		defer db.Close()
-	}
+
 	str := fmt.Sprintf("hphm=%s&tagid=%s&state=%s&key=%s", hphm, tagid, state, md5key)
 	if cmp_md5(str, sign) != true {
 		tagstateret.Status = "1002"
 		glog.V(3).Infoln("sign验证失败")
-		w.Write("{status:'1002'  }")
+		w.Write([]byte("{status:'1002'  }"))
 		return
 	}
 
+	db := opendb()
+	if db == nil {
+		tagstateret.Status = "-1"
+		glog.V(3).Infoln("系统繁忙，稍后再试")
+		w.Write([]byte("{status:'-1'  }"))
+		return
+	} else {
+		defer db.Close()
+	}
 	sql := `UPDATE   mopedtag_tb  SET  mopedtag_tb.moped_id = 
 (SELECT moped_tb.moped_id FROM moped_tb WHERE moped_tb.moped_hphm = "%s" ), 
-mopedtag_tb.tag_id = (SELECT tag_tb.tag_id FROM tag_tb  WHERE tag_tb.tag_tagid = "%s" )
+mopedtag_tb.tag_id = (SELECT tag_tb.tag_id FROM tag_tb  WHERE tag_tb.tag_tagid = "%s" ),
+mopedtag_tb.mopedtag_datetime = "%s" 
 WHERE  mopedtag_tb.moped_id = (SELECT moped_tb.moped_id FROM moped_tb WHERE moped_tb.moped_hphm = "%s" )`
-	sql = fmt.Sprintf(sql, hphm, tagid, hphm)
-	res, err := db.Start(sql)
+	sql = fmt.Sprintf(sql, hphm, tagid, time.Now().Format("2006-01-02 15:04:05"), hphm)
+	fmt.Println(sql)
+	_, err := db.Start(sql)
 	if err != nil {
 		tagstateret.Status = "1000"
-		glog.V(3).Infoln("处理失败")
-		w.Write("{status:'1000'  }")
+		glog.V(3).Infoln("UPDATE   mopedtag_tb处理失败")
+		w.Write([]byte("{status:'1000'  }"))
 		return
 	} else {
 
 		tagstateret.Status = "1" //处理成功
 	}
-	sql := `UPDATE tag_tb SET tag_state = %s WHERE tag_tagid = "%s" `
-	sql = fmt.Sprintf(sql, tagid, state)
-	res, err := db.Start(sql)
+	sql = `UPDATE tag_tb SET tag_state = %s WHERE tag_tagid = "%s" `
+	sql = fmt.Sprintf(sql, state, tagid)
+	_, err = db.Start(sql)
 	if err != nil {
 		tagstateret.Status = "1000"
-		glog.V(3).Infoln("处理失败")
-		w.Write("{status:'1000'  }")
+		glog.V(3).Infoln("UPDATE tag_tb处理失败")
+		w.Write([]byte("{status:'1000'  }"))
 		return
 	} else {
 
@@ -676,12 +689,12 @@ WHERE  mopedtag_tb.moped_id = (SELECT moped_tb.moped_id FROM moped_tb WHERE mope
 	b, err := json.Marshal(tagstateret)
 	if err != nil {
 		glog.V(3).Infoln("statusret 转json 出错")
-		w.Write("{status:1000}  }")
+		w.Write([]byte("{status:1000}  }"))
 		return
 
 	}
 
-	glog.V(3).Infoln("获取车身颜色列表：成功")
+	glog.V(3).Infoln("Upt_tagstate：成功")
 	w.Write(b)
 }
 
