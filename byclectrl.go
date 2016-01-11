@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"os/exec"
+	"time"
 	//"crypto/aes"
 	//"crypto/cipher"
 	"flag"
@@ -128,7 +129,8 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 		return
 	}
 
-	sql := ""
+	sql := `insert into tag_tb(tag_tagid, tag_state) values("%s",1) `
+	sql = fmt.Sprintf(sql, tagid)
 	res, err := db.Start(sql)
 	if err != nil {
 		statusret.Status = "1000"
@@ -139,6 +141,62 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 
 		statusret.Status = "1" //处理成功
 	}
+	sql = `insert into moped_tb(moped_hphm,moped_type,moped_pic,moped_vin,moped_colorid,area_id) 
+	     values("%s",%s,"%s","%s",%s,%s) `
+	sql = fmt.Sprintf(sql, hphm, typeid, pic, vin, colorid, areaid)
+	res, err := db.Start(sql)
+	if err != nil {
+		statusret.Status = "1000"
+		glog.V(3).Infoln("处理失败")
+		w.Write("{status:'1000'}")
+		return
+	} else {
+
+		statusret.Status = "1" //处理成功
+	}
+
+	sql = `insert into owner_tb(owner_name,owner_phone,owner_address,owner_photo,owner_SID,area_id) 
+	     values("%s","%s","%s","%s","%s",%s) `
+	sql = fmt.Sprintf(sql, name, phone, address, photo, SID, areaid)
+	res, err := db.Start(sql)
+	if err != nil {
+		statusret.Status = "1000"
+		glog.V(3).Infoln("处理失败")
+		w.Write("{status:'1000'}")
+		return
+	} else {
+
+		statusret.Status = "1" //处理成功
+	}
+
+	sql = `insert into mopedtag_tb(moped_id,tag_id,mopedtag_datetime,mopedtag_state) 
+	     select moped_tb.moped_id,tag_tb.tag_id,"%s",1 from moped_tb join tag_tb where moped_tb.moped_hphm = "%s" and tag_tb.tag_tagid = "%s" `
+	sql = fmt.Sprintf(sql, time.Now(), hphm.tagid)
+	res, err := db.Start(sql)
+	if err != nil {
+		statusret.Status = "1000"
+		glog.V(3).Infoln("处理失败")
+		w.Write("{status:'1000'}")
+		return
+	} else {
+
+		statusret.Status = "1" //处理成功
+	}
+
+	sql = `insert into mopedowner_tb(moped_id,owner_id,mopedowner_datetime,mopedowner_state) 
+	     select moped_tb.moped_id,owner_tb.owner_id,"%s",1 from moped_tb join owner_tb where moped_tb.moped_hphm = "%s" and owner_tb.owner_name = "%s" `
+	sql = fmt.Sprintf(sql, time.Now(), hphm, name)
+	res, err := db.Start(sql)
+	if err != nil {
+		statusret.Status = "1000"
+		glog.V(3).Infoln("处理失败")
+		w.Write("{status:'1000'}")
+		return
+	} else {
+
+		statusret.Status = "1" //处理成功
+	}
+
 	b, err := json.Marshal(statusret)
 	if err != nil {
 		glog.V(3).Infoln("statusret 转json 出错")
@@ -469,7 +527,36 @@ func get_moped(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.25
 		return
 	}
 
-	sql := ""
+	sql := `SELECT area_tb.area_id, area_tb.area_name ,moped_tb.moped_hphm , 
+			type1_tb.dicword_wordname ,color1_tb.dicword_wordname ,owner_tb.owner_name ,
+			owner_tb.owner_phone,owner_tb.owner_SID, owner_tb.owner_address,tag_tb.tag_tagid,tag_tb.tag_state 
+			FROM owner_tb  JOIN moped_tb JOIN tag_tb   JOIN mopedowner_tb  
+			ON moped_tb.moped_id = moped_tb.moped_id AND  mopedowner_tb.owner_id = owner_tb.owner_id  
+			JOIN mopedtag_tb ON mopedtag_tb.moped_id = moped_tb.moped_id AND mopedtag_tb.tag_id = tag_tb.tag_id  
+			JOIN area_tb ON area_tb.area_id = moped_tb.area_id   
+			JOIN  dicword_tb  AS type1_tb  ON  type1_tb.dicword_dictypeid = 6 AND moped_tb.moped_type = type1_tb.dicword_wordid 
+			JOIN   dicword_tb  AS color1_tb  ON   color1_tb.dicword_dictypeid = 7
+			 AND moped_tb.moped_colorid = color1_tb.dicword_wordid  
+			WHERE  `
+
+	if areaid != "-1" {
+		sql = sql + " area_tb.area_id = " + areaid + " AND "
+	}
+	if hphm != "" {
+		sql = sql + " moped_tb.moped_hphm = \"" + hphm + "\" AND "
+	}
+	if typeid != "-1" {
+		sql = sql + " type1_tb.dicword_wordid = " + typeid + "  AND "
+	}
+	if colorid != "-1" {
+		sql = sql + "  color1_tb.dicword_wordid = " + colorid + "  AND "
+	}
+
+	if name != "" {
+		sql = sql + " owner_tb.owner_name = \"" + name + "\" AND "
+	}
+
+	sql = sql + " 1=1 "
 	res, err := db.Start(sql)
 	if err != nil {
 		mopedret.Status = "1000"
@@ -479,7 +566,38 @@ func get_moped(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.25
 	} else {
 
 		mopedret.Status = "1" //处理成功
+
+		var mopeddata MOPEDARRAY
+		var mopeddatas []MOPEDARRAY
+		for {
+			row, err := res.GetRow()
+			if err != nil {
+				mopeddata.Status = "1000"
+				glog.V(3).Infoln("处理失败")
+				w.Write("{status:'1000',data:[] }")
+				return
+			}
+
+			if row == nil {
+				// No more rows
+				break
+			}
+			mopeddata.Areaid = row.Str(res.Map("area_id"))
+			mopeddata.Areaname = row.Str(res.Map("area_name"))
+			mopeddata.Hphm = row.Str(res.Map("moped_hphm"))
+			mopeddata.Typetype = row.Str(res.Map("dicword_wordname"))
+			mopeddata.Color = row.Str(res.Map("dicword_wordname"))
+			mopeddata.Name = row.Str(res.Map("owner_name"))
+			mopeddata.Phone = row.Str(res.Map("owner_phone"))
+			mopeddata.SID = row.Str(res.Map("owner_SID"))
+			mopeddata.Address = row.Str(res.Map("owner_address"))
+			mopeddata.Tagid = row.Str(res.Map("tag_tagid"))
+			mopeddata.Tagstate = row.Str(res.Map("tag_state"))
+
+			mopeddatas = append(mopeddatas, mopeddata)
+		}
 	}
+	mopedret.Data = mopeddatas
 	b, err := json.Marshal(mopedret)
 	if err != nil {
 		glog.V(3).Infoln("statusret 转json 出错")
@@ -528,7 +646,23 @@ func Upt_tagstate(w http.ResponseWriter, r *http.Request) { /* http://202.127.26
 		return
 	}
 
-	sql := ""
+	sql := `UPDATE   mopedtag_tb  SET  mopedtag_tb.moped_id = 
+(SELECT moped_tb.moped_id FROM moped_tb WHERE moped_tb.moped_hphm = "%s" ), 
+mopedtag_tb.tag_id = (SELECT tag_tb.tag_id FROM tag_tb  WHERE tag_tb.tag_tagid = "%s" )
+WHERE  mopedtag_tb.moped_id = (SELECT moped_tb.moped_id FROM moped_tb WHERE moped_tb.moped_hphm = "%s" )`
+	sql = fmt.Sprintf(sql, hphm, tagid, hphm)
+	res, err := db.Start(sql)
+	if err != nil {
+		tagstateret.Status = "1000"
+		glog.V(3).Infoln("处理失败")
+		w.Write("{status:'1000'  }")
+		return
+	} else {
+
+		tagstateret.Status = "1" //处理成功
+	}
+	sql := `UPDATE tag_tb SET tag_state = %s WHERE tag_tagid = "%s" `
+	sql = fmt.Sprintf(sql, tagid, state)
 	res, err := db.Start(sql)
 	if err != nil {
 		tagstateret.Status = "1000"
