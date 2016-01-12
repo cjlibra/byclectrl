@@ -30,7 +30,7 @@ var md5key = "ga3trimps"
 
 func opendb() mysql.Conn {
 
-	db := mysql.New("tcp", "", "202.127.26.254:3306", "root", "trimps3393", "mopedmanage")
+	db := mysql.New("tcp", "", "127.0.0.1:3306", "root", "trimps3393", "mopedmanage")
 
 	err := db.Connect()
 	if err != nil {
@@ -45,7 +45,7 @@ func GetMd5String(s string) string {
 	h := md5.New()
 	h.Write([]byte(s))
 	ret := hex.EncodeToString(h.Sum(nil))
-	fmt.Println(ret)
+	glog.V(4).Infoln(ret)
 	return ret
 }
 
@@ -89,7 +89,7 @@ func main() {
 }
 
 type STATUSRET struct {
-	Status string
+	Status string `json:"status"`
 }
 
 func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26.252/XXX/mopedtagissue*/
@@ -109,9 +109,30 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 	sign := r.FormValue("sign")
 
 	var statusret STATUSRET
-	if len(tagid) <= 0 || len(areaid) <= 0 || len(hphm) <= 0 || len(name) <= 0 || len(sign) <= 0 {
+
+	if len(r.Form["tagid"]) <= 0 ||
+		len(r.Form["areaid"]) <= 0 ||
+		len(r.Form["hphm"]) <= 0 ||
+		len(r.Form["typeid"]) <= 0 ||
+		len(r.Form["pic"]) <= 0 ||
+		len(r.Form["vin"]) <= 0 ||
+		len(r.Form["colorid"]) <= 0 ||
+		len(r.Form["name"]) <= 0 ||
+		len(r.Form["phone"]) <= 0 ||
+		len(r.Form["address"]) <= 0 ||
+		len(r.Form["photo"]) <= 0 ||
+		len(r.Form["SID"]) <= 0 ||
+		len(r.Form["sign"]) <= 0 {
 		statusret.Status = "1003"
 		glog.V(3).Infoln("请求参数缺失")
+		w.Write([]byte("{status:'1003'}"))
+		return
+
+	}
+
+	if len(tagid) <= 0 || len(areaid) <= 0 || len(hphm) <= 0 || len(name) <= 0 || len(sign) <= 0 {
+		statusret.Status = "1003"
+		glog.V(3).Infoln("请求参数内容缺失")
 		w.Write([]byte("{status:'1003'}"))
 		return
 	}
@@ -133,10 +154,59 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 	} else {
 		defer db.Close()
 	}
-
-	sql := `insert into tag_tb(tag_tagid, tag_state) values("%s",1) `
+	var sql string
+	sql = `SELECT * from tag_tb where tag_tagid = "%s" and (tag_state = 1 or tag_state=2 or tag_state=3)  `
 	sql = fmt.Sprintf(sql, tagid)
-	_, err := db.Start(sql)
+	res, err := db.Start(sql)
+	if err != nil {
+		statusret.Status = "1000"
+		glog.V(3).Infoln("select from tag_tb处理失败")
+		w.Write([]byte("{status:'1000'}"))
+		return
+	}
+	row, err := res.GetRow()
+	if err != nil {
+		statusret.Status = "1000"
+		glog.V(3).Infoln("tag_tb getrow()处理失败")
+		w.Write([]byte("{status:'1000' }"))
+		return
+	}
+
+	if row != nil {
+		statusret.Status = "1000"
+		glog.V(3).Infoln("此卡数据库中已经存在")
+		w.Write([]byte("{status:'1000' }"))
+		return
+	}
+
+	sql = `SELECT * from moped_tb where moped_hphm= "%s" and (moped_state=1 or moped_state=2)`
+	sql = fmt.Sprintf(sql, hphm)
+	res, err = db.Start(sql)
+	if err != nil {
+		statusret.Status = "1000"
+		glog.V(3).Infoln("select from moped_tb处理失败")
+		w.Write([]byte("{status:'1000'}"))
+		return
+	}
+	row, err = res.GetRow()
+	if err != nil {
+		statusret.Status = "1000"
+		glog.V(3).Infoln("moped_tb getrow()处理失败")
+		w.Write([]byte("{status:'1000' }"))
+		return
+	}
+	if row != nil {
+		statusret.Status = "1000"
+		glog.V(3).Infoln("此号牌数据库中已经存在")
+		w.Write([]byte("{status:'1000' }"))
+		return
+	}
+
+	_, err = db.Start("begin")
+
+	sql = `insert into tag_tb(tag_tagid, tag_state) values("%s",1) `
+	sql = fmt.Sprintf(sql, tagid)
+	_, err = db.Start(sql)
 	if err != nil {
 		statusret.Status = "1000"
 		glog.V(3).Infoln("into tag_tb处理失败")
@@ -154,6 +224,10 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 		statusret.Status = "1000"
 		glog.V(3).Infoln("into moped_tb处理失败")
 		w.Write([]byte("{status:'1000'}"))
+		_, err = db.Start("rollback")
+		if err != nil {
+			glog.V(3).Infoln("into  tag_tb rollback处理失败")
+		}
 		return
 	} else {
 
@@ -168,6 +242,10 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 		statusret.Status = "1000"
 		glog.V(3).Infoln("into owner_tb处理失败")
 		w.Write([]byte("{status:'1000'}"))
+		_, err = db.Start("rollback")
+		if err != nil {
+			glog.V(3).Infoln("into  moped_tb rollback处理失败")
+		}
 		return
 	} else {
 
@@ -182,6 +260,10 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 		statusret.Status = "1000"
 		glog.V(3).Infoln("into mopedtag_tb处理失败")
 		w.Write([]byte("{status:'1000'}"))
+		_, err = db.Start("rollback")
+		if err != nil {
+			glog.V(3).Infoln("into  owner_tb rollback处理失败")
+		}
 		return
 	} else {
 
@@ -196,10 +278,21 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 		statusret.Status = "1000"
 		glog.V(3).Infoln("into mopedowner_tb处理失败")
 		w.Write([]byte("{status:'1000'}"))
+		_, err = db.Start("rollback")
+		if err != nil {
+			glog.V(3).Infoln("into  mopedtag_tb rollback处理失败")
+		}
 		return
 	} else {
 
 		statusret.Status = "1" //处理成功
+	}
+
+	_, err = db.Start("commit")
+	if err != nil {
+		glog.V(3).Infoln("commit处理失败")
+		w.Write([]byte("{status:'1000'}"))
+		return
 	}
 
 	b, err := json.Marshal(statusret)
@@ -216,12 +309,12 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 }
 
 type AREADATA struct {
-	Area_id   string
-	Area_name string
+	Area_id   string `json:"area_id"`
+	Area_name string `json:"area_name"`
 }
 type AREARET struct {
-	Status string
-	Data   []AREADATA
+	Status string     `json:"status"`
+	Data   []AREADATA `json:"data"`
 }
 
 func area_func(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.252/XXX/area   */
@@ -229,9 +322,16 @@ func area_func(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.25
 	areaid := r.FormValue("areaid")
 	sign := r.FormValue("sign")
 	var arearet AREARET
-	if len(areaid) <= 0 || len(sign) <= 0 {
+
+	if len(r.Form["areaid"]) <= 0 || len(r.Form["sign"]) <= 0 {
 		arearet.Status = "1003"
 		glog.V(3).Infoln("请求参数缺失")
+		w.Write([]byte("{status:'1003',data:[]}"))
+		return
+	}
+	if len(areaid) <= 0 || len(sign) <= 0 {
+		arearet.Status = "1003"
+		glog.V(3).Infoln("请求参数内容缺失")
 		w.Write([]byte("{status:'1003',data:[]}"))
 		return
 	}
@@ -286,7 +386,7 @@ func area_func(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.25
 			}
 			areadata.Area_id = row.Str(res.Map("area_id"))
 			areadata.Area_name = row.Str(res.Map("area_name"))
-			fmt.Println(areadata.Area_name)
+			//fmt.Println(areadata.Area_name)
 			areadatas = append(areadatas, areadata)
 		}
 
@@ -306,12 +406,12 @@ func area_func(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.25
 }
 
 type TYPEARRAY struct {
-	Type_id   string
-	Type_name string
+	Type_id   string `json:"type_id"`
+	Type_name string `json:"type_name"`
 }
 type TYPERET struct {
-	Status string
-	Data   []TYPEARRAY
+	Status string      `json:"status"`
+	Data   []TYPEARRAY `json:"data"`
 }
 
 func type_func(w http.ResponseWriter, r *http.Request) { /*  http://202.127.26.252/XXX/type   */
@@ -319,9 +419,16 @@ func type_func(w http.ResponseWriter, r *http.Request) { /*  http://202.127.26.2
 	typeid := r.FormValue("typeid")
 	sign := r.FormValue("sign")
 	var typeret TYPERET
-	if len(typeid) <= 0 || len(sign) <= 0 {
+
+	if len(r.Form["typeid"]) <= 0 || len(r.Form["sign"]) <= 0 {
 		typeret.Status = "1003"
 		glog.V(3).Infoln("请求参数缺失")
+		w.Write([]byte("{status:'1003',data:[]}"))
+		return
+	}
+	if len(typeid) <= 0 || len(sign) <= 0 {
+		typeret.Status = "1003"
+		glog.V(3).Infoln("请求参数内容缺失")
 		w.Write([]byte("{status:'1003',data:[] }"))
 		return
 	}
@@ -395,12 +502,12 @@ func type_func(w http.ResponseWriter, r *http.Request) { /*  http://202.127.26.2
 }
 
 type COLORARRAY struct {
-	Color_id   string
-	Color_name string
+	Color_id   string `json:"color_id"`
+	Color_name string `json:"color_name"`
 }
 type COLORRET struct {
-	Status string
-	Data   []COLORARRAY
+	Status string       `json:"status"`
+	Data   []COLORARRAY `json:"data"`
 }
 
 func color_func(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.252/XXX/color   */
@@ -408,9 +515,15 @@ func color_func(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.2
 	colorid := r.FormValue("colorid")
 	sign := r.FormValue("sign")
 	var colorret COLORRET
-	if len(colorid) <= 0 || len(sign) <= 0 {
+	if len(r.Form["colorid"]) <= 0 || len(r.Form["sign"]) <= 0 {
 		colorret.Status = "1003"
 		glog.V(3).Infoln("请求参数缺失")
+		w.Write([]byte("{status:'1003',data:[]}"))
+		return
+	}
+	if len(colorid) <= 0 || len(sign) <= 0 {
+		colorret.Status = "1003"
+		glog.V(3).Infoln("请求参数内容缺失")
 		w.Write([]byte("{status:'1003',data:[] }"))
 		return
 	}
@@ -484,22 +597,22 @@ func color_func(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.2
 }
 
 type MOPEDARRAY struct {
-	Areaid   string // 区域ID
-	Areaname string //区域名称
-	Hphm     string //车牌号码
-	Typetype string // 车辆品牌
-	Color    string // 车辆颜色
-	Name     string // 车主姓名
-	Phone    string // 电话
-	SID      string // 身份证号码
-	Address  string // 车主住址
-	Tagid    string // 车辆标签id
-	Tagstate string // 车辆标签状态
+	Areaid   string `json:"areaid"`   // 区域ID
+	Areaname string `json:"areaname"` //区域名称
+	Hphm     string `json:"hphm"`     //车牌号码
+	Typetype string `json:"type"`     // 车辆品牌
+	Color    string `json:"color"`    // 车辆颜色
+	Name     string `json:"name"`     // 车主姓名
+	Phone    string `json:"phone"`    // 电话
+	SID      string `json:"SID"`      // 身份证号码
+	Address  string `json:"Address"`  // 车主住址
+	Tagid    string `json:"Tagid"`    // 车辆标签id
+	Tagstate string `json:"Tagstate"` // 车辆标签状态
 
 }
 type MOPEDRET struct {
-	Status string
-	Data   []MOPEDARRAY
+	Status string       `json:"status"`
+	Data   []MOPEDARRAY `json:"data"`
 }
 
 func get_moped(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.252/XXX/get_moped   */
@@ -512,9 +625,22 @@ func get_moped(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.25
 	sign := r.FormValue("sign")
 
 	var mopedret MOPEDRET
-	if len(areaid) <= 0 || len(sign) <= 0 || len(typeid) <= 0 || len(colorid) <= 0 {
+
+	if len(r.Form["areaid"]) <= 0 ||
+		len(r.Form["hphm"]) <= 0 ||
+		len(r.Form["typeid"]) <= 0 ||
+		len(r.Form["colorid"]) <= 0 ||
+		len(r.Form["name"]) <= 0 ||
+		len(r.Form["sign"]) <= 0 {
 		mopedret.Status = "1003"
 		glog.V(3).Infoln("请求参数缺失")
+		w.Write([]byte("{status:'1003',data:[] }"))
+		return
+	}
+
+	if len(areaid) <= 0 || len(sign) <= 0 || len(typeid) <= 0 || len(colorid) <= 0 {
+		mopedret.Status = "1003"
+		glog.V(3).Infoln("请求参数内容缺失")
 		w.Write([]byte("{status:'1003',data:[] }"))
 		return
 	}
@@ -622,7 +748,7 @@ func get_moped(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.25
 }
 
 type TAGSTATERET struct {
-	Status string
+	Status string `json:"status"`
 }
 
 func Upt_tagstate(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.252/XXX/Upt_tagstate   */
@@ -633,9 +759,18 @@ func Upt_tagstate(w http.ResponseWriter, r *http.Request) { /* http://202.127.26
 	sign := r.FormValue("sign")
 
 	var tagstateret TAGSTATERET
-	if len(hphm) <= 0 || len(tagid) <= 0 || len(state) <= 0 || len(sign) <= 0 {
+	if len(r.Form["hphm"]) <= 0 ||
+		len(r.Form["tagid"]) <= 0 ||
+		len(r.Form["state"]) <= 0 ||
+		len(r.Form["sign"]) <= 0 {
 		tagstateret.Status = "1003"
 		glog.V(3).Infoln("请求参数缺失")
+		w.Write([]byte("{status:'1003'  }"))
+		return
+	}
+	if len(hphm) <= 0 || len(tagid) <= 0 || len(state) <= 0 || len(sign) <= 0 {
+		tagstateret.Status = "1003"
+		glog.V(3).Infoln("请求参数内容缺失")
 		w.Write([]byte("{status:'1003'  }"))
 		return
 	}
