@@ -67,6 +67,7 @@ func main() {
 	http.HandleFunc("/color", color_func)
 	http.HandleFunc("/get_moped", get_moped)
 	http.HandleFunc("/Upt_tagstate", Upt_tagstate)
+	http.HandleFunc("/getMopedBynameOrHphm", getMopedBynameOrHphm)
 
 	http.HandleFunc("/jcomein", jcomein)
 	http.Handle("/src/", http.StripPrefix("/src/", http.FileServer(http.Dir("./htmlsrc/"))))
@@ -833,6 +834,115 @@ WHERE  mopedtag_tb.moped_id = (SELECT moped_tb.moped_id FROM moped_tb WHERE mope
 	w.Write(b)
 }
 
+type MOPEDBYNAMEARRAY struct {
+	Areaname  string `json:"areaname"`  //区域名称
+	Hphm      string `json:"hphm"`      //车牌号码
+	Typetype  string `json:"type"`      //=> 车辆品牌
+	Color     string `json:"color"`     // => 车辆颜色
+	Name      string `json:"name"`      //=> 车主姓名
+	Moped_id  string `json:"moped_id"`  // 表编号
+	Tag_tagid string `json:"tag_tagid"` // 标签ID
+}
+
+type MOPEDBYNAMERET struct {
+	Status string             `json:"status"`
+	Data   []MOPEDBYNAMEARRAY `json:"data"`
+}
+
+func getMopedBynameOrHphm(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.252/XXX/getMopedBynameOrHphm   */
+	r.ParseForm()
+	hphm := r.FormValue("hphm")
+	ownername := r.FormValue("ownername")
+	sign := r.FormValue("sign")
+
+	if len(r.Form["hphm"]) <= 0 || len(r.Form["ownername"]) <= 0 || len(r.Form["sign"]) <= 0 {
+		glog.V(3).Infoln("请求参数缺失")
+		w.Write([]byte("{status:'1003'  }"))
+		return
+	}
+	if len(hphm) <= 0 || len(ownername) <= 0 || len(sign) <= 0 {
+		glog.V(3).Infoln("请求参数内容缺失")
+		w.Write([]byte("{status:'1003'  }"))
+		return
+	}
+	str := fmt.Sprintf("hphm=%s&ownername=%s&key=%s", hphm, ownername, md5key)
+	if cmp_md5(str, sign) != true {
+		glog.V(3).Infoln("sign验证失败")
+		w.Write([]byte("{status:'1002' }"))
+		return
+	}
+
+	db := opendb()
+	if db == nil {
+		glog.V(3).Infoln("系统繁忙，稍后再试")
+		w.Write([]byte("{status:'-1'}"))
+		return
+	} else {
+		defer db.Close()
+	}
+
+	sql := `select DISTINCT area_tb.area_name , moped_tb.moped_hphm ,type1_tb.dicword_wordname as typetype ,  color1_tb.dicword_wordname , 
+	  owner_tb.owner_name , moped_tb.moped_id , tag_tb.tag_tagid 
+	  FROM owner_tb  JOIN moped_tb JOIN tag_tb   JOIN mopedowner_tb  
+			ON moped_tb.moped_id = moped_tb.moped_id AND  mopedowner_tb.owner_id = owner_tb.owner_id  
+			JOIN mopedtag_tb ON mopedtag_tb.moped_id = moped_tb.moped_id AND mopedtag_tb.tag_id = tag_tb.tag_id  
+			JOIN area_tb ON area_tb.area_id = moped_tb.area_id   
+			JOIN  dicword_tb  AS type1_tb  ON  type1_tb.dicword_dictypeid = 6 AND moped_tb.moped_type = type1_tb.dicword_wordid 
+			JOIN   dicword_tb  AS color1_tb  ON   color1_tb.dicword_dictypeid = 7
+			 AND moped_tb.moped_colorid = color1_tb.dicword_wordid  
+			WHERE moped_tb.moped_hphm = "%s" and owner_tb.owner_name = "%s"`
+	sql = fmt.Sprintf(sql, hphm, ownername)
+	//glog.V(3).Infoln(sql)
+
+	res, err := db.Start(sql)
+	var mopedbynamedata MOPEDBYNAMEARRAY
+	var mopedbynamedatas []MOPEDBYNAMEARRAY
+	var mopedbynameret MOPEDBYNAMERET
+	if err != nil {
+		glog.V(3).Infoln("处理失败")
+		w.Write([]byte("{status:'1000',data:[] }"))
+		return
+	} else {
+
+		mopedbynameret.Status = "1" //处理成功
+
+		for {
+			row, err := res.GetRow()
+			if err != nil {
+				glog.V(3).Infoln("处理失败")
+				w.Write([]byte("{status:'1000',data:[] }"))
+				return
+			}
+
+			if row == nil {
+				// No more rows
+				break
+			}
+
+			mopedbynamedata.Areaname = row.Str(res.Map("area_name"))
+			mopedbynamedata.Hphm = row.Str(res.Map("moped_hphm"))
+			mopedbynamedata.Typetype = row.Str(res.Map("typetype"))
+			mopedbynamedata.Color = row.Str(res.Map("dicword_wordname"))
+			mopedbynamedata.Name = row.Str(res.Map("owner_name"))
+			mopedbynamedata.Moped_id = row.Str(res.Map("moped_id"))
+			mopedbynamedata.Tag_tagid = row.Str(res.Map("tag_tagid"))
+
+			mopedbynamedatas = append(mopedbynamedatas, mopedbynamedata)
+		}
+	}
+	mopedbynameret.Data = mopedbynamedatas
+	b, err := json.Marshal(mopedbynameret)
+	if err != nil {
+		glog.V(3).Infoln("statusret 转json 出错")
+		w.Write([]byte("{status:1000},data:[] }"))
+		return
+
+	}
+
+	glog.V(3).Infoln("获取车辆信息以车牌和用户名列表：成功")
+	w.Write(b)
+
+}
 func jcomein(w http.ResponseWriter, r *http.Request) { /*    */
 	r.ParseForm()
 	quest := r.FormValue("quest")
