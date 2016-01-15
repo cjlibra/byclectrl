@@ -1284,10 +1284,48 @@ func repeatISssue(w http.ResponseWriter, r *http.Request) { /*  http://202.127.2
 			return
 		}
 
-		_, err = db.Start("begin")
+		var strtag_id string
+		sql = ` SELECT tag_tb.tag_id FROM tag_tb 
+inner join mopedtag_tb on mopedtag_tb.tag_id = tag_tb.tag_id
+inner join moped_tb on moped_tb.moped_id = mopedtag_tb.moped_id
+WHERE (moped_tb.moped_id = %s) and (moped_tb.moped_state = 2) and (mopedtag_tb.mopedtag_state = 1) order by tag_tb.tag_id `
+
+		sql = fmt.Sprintf(sql, mopedid)
+		res, err = db.Start(sql)
+		if err != nil {
+			statusret.Status = "1000"
+			glog.V(3).Infoln("SELECT tag_tb.tag_id处理失败")
+			w.Write([]byte("{status:'1000'}"))
+			db.Start("rollback")
+			return
+		} else {
+
+			statusret.Status = "1" //处理成功
+
+			row, err := res.GetRow()
+			if err != nil {
+				glog.V(3).Infoln("SELECT tag_tb.tag_id处理失败")
+				w.Write([]byte("{status:'1000'  }"))
+				return
+			}
+
+			if row == nil {
+				// No more rows
+				glog.V(3).Infoln("没有找到此张卡，处理失败")
+				w.Write([]byte("{status:'1000'  }"))
+				return
+			}
+
+			strtag_id = row.Str(res.Map("tag_id"))
+
+		}
+
+		//_, _, err = db.Query("begin")
+		_, err = db.Begin()
 		sql = ` insert into tag_tb(tag_tagid,tag_phyno,tag_state) values("%s","%s",2) `
 		sql = fmt.Sprintf(sql, tagid, tagphyno)
-		_, err = db.Start(sql)
+
+		_, _, err = db.Query(sql)
 		if err != nil {
 			statusret.Status = "1000"
 			glog.V(3).Infoln("into tag_tb处理失败")
@@ -1298,12 +1336,10 @@ func repeatISssue(w http.ResponseWriter, r *http.Request) { /*  http://202.127.2
 			statusret.Status = "1" //处理成功
 		}
 
-		sql = ` update tag_tb set tag_state = 1 where tag_id = (SELECT tag_tb.tag_id FROM tag_tb 
-inner join mopedtag_tb on mopedtag_tb.tag_id=tag_tb.tag_id
-inner join moped_tb on moped_tb.moped_id=mopedtag_tb.moped_id
-WHERE (moped_tb.moped_id = %s) and (moped_state = 2) and (mopedtag_tb.mopedtag_state = 1) order by tag_tb.tag_id) `
+		sql = ` update tag_tb set tag_state = 1 where tag_id = %s `
 
-		sql = fmt.Sprintf(sql, mopedid)
+		sql = fmt.Sprintf(sql, strtag_id)
+
 		_, err = db.Start(sql)
 		if err != nil {
 			statusret.Status = "1000"
@@ -1316,12 +1352,8 @@ WHERE (moped_tb.moped_id = %s) and (moped_state = 2) and (mopedtag_tb.mopedtag_s
 			statusret.Status = "1" //处理成功
 		}
 
-		sql = ` update mopedtag_tb set mopedtag_state = 0 where (moped_id = %s) and (tag_id =
-		(SELECT tag_tb.tag_id FROM tag_tb 
-inner join mopedtag_tb on mopedtag_tb.tag_id=tag_tb.tag_id
-inner join moped_tb on moped_tb.moped_id=mopedtag_tb.moped_id
-WHERE (moped_tb.moped_id = %s) and (moped_state = 2) and (mopedtag_tb.mopedtag_state = 1) order by tag_tb.tag_id))   `
-		sql = fmt.Sprintf(sql, mopedid, mopedid)
+		sql = ` update mopedtag_tb set mopedtag_state = 0 where (moped_id = %s) and (tag_id =%s ) `
+		sql = fmt.Sprintf(sql, mopedid, strtag_id)
 		_, err = db.Start(sql)
 		if err != nil {
 			statusret.Status = "1000"
@@ -1336,7 +1368,7 @@ WHERE (moped_tb.moped_id = %s) and (moped_state = 2) and (mopedtag_tb.mopedtag_s
 		}
 
 		sql = `insert into mopedtag_tb(moped_id,tag_id,mopedtag_datetime,mopedtag_state)
-		values(%s,%s,"%s",1)";   `
+		values(%s,%s,"%s",1) `
 		sql = fmt.Sprintf(sql, mopedid, tagid, time.Now().Format("2006-01-02 15:04:05"))
 		_, err = db.Start(sql)
 		if err != nil {
