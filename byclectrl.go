@@ -1353,6 +1353,17 @@ WHERE (moped_tb.moped_id = %s) and (moped_state = 2) and (mopedtag_tb.mopedtag_s
 		}
 
 	}
+
+	b, err := json.Marshal(statusret)
+	if err != nil {
+		glog.V(3).Infoln("statusret 转json 出错")
+		w.Write([]byte("{status:'1000'}  }"))
+		return
+
+	}
+
+	glog.V(3).Infoln("repeatISssue：成功")
+	w.Write(b)
 }
 func jcomein(w http.ResponseWriter, r *http.Request) { /*    */
 	r.ParseForm()
