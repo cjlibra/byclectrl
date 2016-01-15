@@ -6,56 +6,7 @@
 </head>
 <body>
 
-
-
-<form action="/area" method="post">
-  <p>areaid: <input type="text" name="areaid" /></p>
-  <p>sign: <input type="text" name="sign" /></p>
-  <input type="submit" value="Submit" />
-</form>
-
-
-<hr>
-
-<form action="/type" method="post">
-  <p>typeid: <input type="text" name="typeid" /></p>
-  <p>sign: <input type="text" name="sign" /></p>
-  <input type="submit" value="Submit" />
-</form>
-
-<hr>
-
-<form action="/color" method="post">
-  <p>colorid: <input type="text" name="colorid" /></p>
-  <p>sign: <input type="text" name="sign" /></p>
-  <input type="submit" value="Submit" />
-</form>
-
-<hr>
-
-<form action="/get_moped" method="post">
-  <p>areaid: <input type="text" name="areaid" /></p>
-  <p>hphm: <input type="text" name="hphm" /></p>
-  <p>typeid: <input type="text" name="typeid" /></p>
-  <p>colorid: <input type="text" name="colorid" /></p>
-  <p>name: <input type="text" name="name" /></p>
-  <p>sign: <input type="text" name="sign" /></p>
-  <input type="submit" value="Submit" />
-</form>
-
-<hr>
-
-<form action="/Upt_tagstate" method="post">
-  <p>hphm: <input type="text" name="hphm" /></p>
-  <p>tagid: <input type="text" name="tagid" /></p>
-  <p>state: <input type="text" name="state" /></p>
-  <p>sign: <input type="text" name="sign" /></p>
-  
-  <input type="submit" value="Submit" />
-</form>
-
-<hr>
-
+1  http://202.127.26.252/XXX/mopedtagissue
 <form action="/mopedtagissue" method="post">
   <p>tagid: <input type="text" name="tagid" /></p>
   <p>areaid: <input type="text" name="areaid" /></p>
@@ -72,15 +23,100 @@
   <p>sign: <input type="text" name="sign" /></p>
   <input type="submit" value="Submit" />
 </form>
+<hr>
+2  http://202.127.26.252/XXX/area
+<form action="/area" method="post">
+  <p>areaid: <input type="text" name="areaid" /></p>
+  <p>sign: <input type="text" name="sign" /></p>
+  <input type="submit" value="Submit" />
+</form>
+
 
 <hr>
-http://202.127.26.252/XXX/getMopedBynameOrHphm
+3   http://202.127.26.252/XXX/type
+<form action="/type" method="post">
+  <p>typeid: <input type="text" name="typeid" /></p>
+  <p>sign: <input type="text" name="sign" /></p>
+  <input type="submit" value="Submit" />
+</form>
+
+<hr>
+4  http://202.127.26.252/XXX/color
+<form action="/color" method="post">
+  <p>colorid: <input type="text" name="colorid" /></p>
+  <p>sign: <input type="text" name="sign" /></p>
+  <input type="submit" value="Submit" />
+</form>
+
+<hr>
+5    http://202.127.26.252/XXX/get_moped
+<form action="/get_moped" method="post">
+  <p>areaid: <input type="text" name="areaid" /></p>
+  <p>hphm: <input type="text" name="hphm" /></p>
+  <p>typeid: <input type="text" name="typeid" /></p>
+  <p>colorid: <input type="text" name="colorid" /></p>
+  <p>name: <input type="text" name="name" /></p>
+  <p>sign: <input type="text" name="sign" /></p>
+  <input type="submit" value="Submit" />
+</form>
+
+<hr>
+6    http://202.127.26.252/XXX/Upt_tagstate
+<form action="/Upt_tagstate" method="post">
+  <p>hphm: <input type="text" name="hphm" /></p>
+  <p>tagid: <input type="text" name="tagid" /></p>
+  <p>state: <input type="text" name="state" /></p>
+  <p>sign: <input type="text" name="sign" /></p>
+  
+  <input type="submit" value="Submit" />
+</form>
+
+
+
+<hr>
+7   http://202.127.26.252/XXX/getMopedBynameOrHphm
 <form action="/getMopedBynameOrHphm" method="post">
   
   <p>hphm: <input type="text" name="hphm" /></p>
   
   <p>ownername: <input type="text" name="ownername" /></p>
  
+  <p>sign: <input type="text" name="sign" /></p>
+  <input type="submit" value="Submit" />
+</form>
+
+<hr>
+8   http://202.127.26.252/XXX/updateState
+<form action="/updateState" method="post">
+    <p>tagid: <input type="text" name="tagid" /></p> 
+  <p>tagstate: <input type="text" name="tagstate" /></p>
+  <p>hphm: <input type="text" name="hphm" /></p> 
+   <p>mopedid: <input type="text" name="mopedid" /></p> 
+  <p>sign: <input type="text" name="sign" /></p>
+  <input type="submit" value="Submit" />
+</form>
+
+
+
+<hr>
+9  http://202.127.26.252/XXX/getTagid
+<form action="/getTagid" method="post">
+  
+  <p>hphm: <input type="text" name="hphm" /></p> 
+  <p>sign: <input type="text" name="sign" /></p>
+  <input type="submit" value="Submit" />
+</form>
+
+
+<hr>
+10 http://202.127.26.252/XXX/repeatISssue
+<form action="/repeatISssue" method="post">
+  
+  <p>mopedid: <input type="text" name="mopedid" /></p> 
+  <p>tagid: <input type="text" name="tagid" /></p>
+  <p>tagphyno: <input type="text" name="tagphyno" /></p> 
+  <p>mopedstate: <input type="text" name="mopedstate" /></p>
+  
   <p>sign: <input type="text" name="sign" /></p>
   <input type="submit" value="Submit" />
 </form>

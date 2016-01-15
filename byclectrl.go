@@ -68,7 +68,9 @@ func main() {
 	http.HandleFunc("/get_moped", get_moped)
 	http.HandleFunc("/Upt_tagstate", Upt_tagstate)
 	http.HandleFunc("/getMopedBynameOrHphm", getMopedBynameOrHphm)
-
+	http.HandleFunc("/updateState", updateState)
+	http.HandleFunc("/getTagid", getTagid)
+	http.HandleFunc("/repeatISssue", repeatISssue)
 	http.HandleFunc("/jcomein", jcomein)
 	http.Handle("/src/", http.StripPrefix("/src/", http.FileServer(http.Dir("./htmlsrc/"))))
 
@@ -205,7 +207,7 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 
 	_, err = db.Start("begin")
 
-	sql = `insert into tag_tb(tag_tagid, tag_state) values("%s",1) `
+	sql = `insert into tag_tb(tag_tagid, tag_state) values("%s",2) `
 	sql = fmt.Sprintf(sql, tagid)
 	_, err = db.Start(sql)
 	if err != nil {
@@ -793,6 +795,7 @@ func Upt_tagstate(w http.ResponseWriter, r *http.Request) { /* http://202.127.26
 	} else {
 		defer db.Close()
 	}
+	db.Start("begin")
 	sql := `UPDATE   mopedtag_tb  SET  mopedtag_tb.moped_id = 
 (SELECT moped_tb.moped_id FROM moped_tb WHERE moped_tb.moped_hphm = "%s" ), 
 mopedtag_tb.tag_id = (SELECT tag_tb.tag_id FROM tag_tb  WHERE tag_tb.tag_tagid = "%s" ),
@@ -817,10 +820,12 @@ WHERE  mopedtag_tb.moped_id = (SELECT moped_tb.moped_id FROM moped_tb WHERE mope
 		tagstateret.Status = "1000"
 		glog.V(3).Infoln("UPDATE tag_tb处理失败")
 		w.Write([]byte("{status:'1000'  }"))
+		db.Start("rollback")
 		return
 	} else {
 
 		tagstateret.Status = "1" //处理成功
+		db.Start("commit")
 	}
 	b, err := json.Marshal(tagstateret)
 	if err != nil {
@@ -942,6 +947,412 @@ func getMopedBynameOrHphm(w http.ResponseWriter, r *http.Request) { /* http://20
 	glog.V(3).Infoln("获取车辆信息以车牌和用户名列表：成功")
 	w.Write(b)
 
+}
+
+type GETTAGIDARRAY struct {
+	Tag_state string `json:"tag_state"` //  卡状态
+	Tag_tagid string `json:"tag_tagid"` // 标签ID
+}
+type GETTAGIDRET struct {
+	Status string          `json:"status"`
+	Data   []GETTAGIDARRAY `json:"data"`
+}
+
+func getTagid(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.252/XXX/getTagid   */
+	r.ParseForm()
+	hphm := r.FormValue("hphm")
+	sign := r.FormValue("sign")
+
+	if len(r.Form["hphm"]) <= 0 || len(r.Form["sign"]) <= 0 {
+		glog.V(3).Infoln("请求参数缺失")
+		w.Write([]byte("{status:'1003'  }"))
+		return
+	}
+	if len(hphm) <= 0 || len(sign) <= 0 {
+		glog.V(3).Infoln("请求参数内容缺失")
+		w.Write([]byte("{status:'1003'  }"))
+		return
+	}
+	str := fmt.Sprintf("hphm=%s&key=%s", hphm, md5key)
+	if cmp_md5(str, sign) != true {
+		glog.V(3).Infoln("sign验证失败")
+		w.Write([]byte("{status:'1002' }"))
+		return
+	}
+
+	db := opendb()
+	if db == nil {
+		glog.V(3).Infoln("系统繁忙，稍后再试")
+		w.Write([]byte("{status:'-1'}"))
+		return
+	} else {
+		defer db.Close()
+	}
+
+	sql := `select DISTINCT tag_tb.tag_state , tag_tb.tag_tagid 
+	  FROM  moped_tb 
+	  JOIN mopedtag_tb   on moped_tb.moped_id = mopedtag_tb.moped_id 
+	  JOIN tag_tb  	on tag_tb.tag_id = mopedtag_tb.tag_id
+	  WHERE moped_tb.moped_hphm = "%s"  `
+	sql = fmt.Sprintf(sql, hphm)
+	//glog.V(3).Infoln(sql)
+
+	res, err := db.Start(sql)
+	var gettagiddata GETTAGIDARRAY
+	var gettagiddatas []GETTAGIDARRAY
+	var gettagidret GETTAGIDRET
+	if err != nil {
+		glog.V(3).Infoln("处理失败")
+		w.Write([]byte("{status:'1000',data:[] }"))
+		return
+	} else {
+
+		gettagidret.Status = "1" //处理成功
+
+		for {
+			row, err := res.GetRow()
+			if err != nil {
+				glog.V(3).Infoln("处理失败")
+				w.Write([]byte("{status:'1000',data:[] }"))
+				return
+			}
+
+			if row == nil {
+				// No more rows
+				break
+			}
+
+			gettagiddata.Tag_state = row.Str(res.Map("tag_state"))
+			gettagiddata.Tag_tagid = row.Str(res.Map("tag_tagid"))
+
+			gettagiddatas = append(gettagiddatas, gettagiddata)
+		}
+	}
+	gettagidret.Data = gettagiddatas
+	b, err := json.Marshal(gettagidret)
+	if err != nil {
+		glog.V(3).Infoln("statusret 转json 出错")
+		w.Write([]byte("{status:1000},data:[] }"))
+		return
+
+	}
+
+	glog.V(3).Infoln("获取卡状态和标签ID：成功")
+	w.Write(b)
+}
+
+func updateState(w http.ResponseWriter, r *http.Request) { /*    http://202.127.26.252/XXX/updateState  */
+	r.ParseForm()
+	tagid := r.FormValue("tagid")
+	tagstate := r.FormValue("tagstate")
+	hphm := r.FormValue("hphm")
+	mopedid := r.FormValue("mopedid")
+	sign := r.FormValue("sign")
+
+	if len(r.Form["tagid"]) <= 0 || len(r.Form["tagstate"]) <= 0 || len(r.Form["hphm"]) <= 0 || len(r.Form["mopedid"]) <= 0 || len(r.Form["sign"]) <= 0 {
+		glog.V(3).Infoln("请求参数缺失")
+		w.Write([]byte("{status:'1003'  }"))
+		return
+	}
+	if len(tagid) <= 0 || len(tagstate) <= 0 || len(hphm) <= 0 || len(mopedid) <= 0 || len(sign) <= 0 {
+		glog.V(3).Infoln("请求参数内容缺失")
+		w.Write([]byte("{status:'1003'  }"))
+		return
+	}
+	str := fmt.Sprintf("tagid=%s&tagstate=%s&hphm=%s&mopedid=%s&key=%s", tagid, tagstate, hphm, mopedid, md5key)
+	if cmp_md5(str, sign) != true {
+		glog.V(3).Infoln("sign验证失败")
+		w.Write([]byte("{status:'1002' }"))
+		return
+	}
+
+	db := opendb()
+	if db == nil {
+		glog.V(3).Infoln("系统繁忙，稍后再试")
+		w.Write([]byte("{status:'-1'}"))
+		return
+	} else {
+		defer db.Close()
+	}
+	var statusret STATUSRET
+	var sql string
+
+	if tagstate == "3" {
+
+		sql = `update tag_tb set tag_state= %s where tag_tagid = "%s" `
+		sql = fmt.Sprintf(sql, tagstate, tagid)
+		_, err := db.Start(sql)
+		if err != nil {
+			statusret.Status = "1000"
+			glog.V(3).Infoln("update tag_tb处理失败")
+			w.Write([]byte("{status:'1000'}"))
+			return
+		} else {
+
+			statusret.Status = "1" //处理成功
+		}
+	} else {
+		_, err := db.Start("begin")
+		sql = `update tag_tb set tag_state= %s where tag_tagid = "%s" `
+		sql = fmt.Sprintf(sql, tagstate, tagid)
+		_, err = db.Start(sql)
+		if err != nil {
+			statusret.Status = "1000"
+			glog.V(3).Infoln("update tag_tb处理失败")
+			w.Write([]byte("{status:'1000'}"))
+			return
+		} else {
+
+			statusret.Status = "1" //处理成功
+		}
+
+		sql = `update moped_tb set moped_state = 1 where moped_hphm = "%s" `
+		sql = fmt.Sprintf(sql, hphm)
+		_, err = db.Start(sql)
+		if err != nil {
+			statusret.Status = "1000"
+			glog.V(3).Infoln("update moped_tb处理失败")
+			w.Write([]byte("{status:'1000'}"))
+			db.Start("rollback")
+
+			return
+		} else {
+
+			statusret.Status = "1" //处理成功
+		}
+
+		sql = `update mopedtag_tb set mopedtag_state = 0 where moped_id = "%s" `
+		sql = fmt.Sprintf(sql, mopedid)
+		_, err = db.Start(sql)
+		if err != nil {
+			statusret.Status = "1000"
+			glog.V(3).Infoln("update mopedtag_tb处理失败")
+			w.Write([]byte("{status:'1000'}"))
+			db.Start("rollback")
+
+			return
+		} else {
+
+			statusret.Status = "1" //处理成功
+			db.Start("commit")
+		}
+
+	}
+
+	b, err := json.Marshal(statusret)
+	if err != nil {
+		glog.V(3).Infoln("statusret 转json 出错")
+		w.Write([]byte("{status:'1000'}  }"))
+		return
+
+	}
+
+	glog.V(3).Infoln("updateState：成功")
+	w.Write(b)
+
+}
+func repeatISssue(w http.ResponseWriter, r *http.Request) { /*  http://202.127.26.252/XXX/repeatISssue  */
+	r.ParseForm()
+	mopedid := r.FormValue("mopedid")
+	tagid := r.FormValue("tagid")
+	tagphyno := r.FormValue("tagphyno")
+	mopedstate := r.FormValue("mopedstate")
+	sign := r.FormValue("sign")
+
+	if len(r.Form["mopedid"]) <= 0 || len(r.Form["tagid"]) <= 0 || len(r.Form["tagphyno"]) <= 0 || len(r.Form["mopedstate"]) <= 0 || len(r.Form["sign"]) <= 0 {
+		glog.V(3).Infoln("请求参数缺失")
+		w.Write([]byte("{status:'1003'  }"))
+		return
+	}
+	if len(mopedid) <= 0 || len(tagid) <= 0 || len(tagphyno) <= 0 || len(mopedstate) <= 0 || len(sign) <= 0 {
+		glog.V(3).Infoln("请求参数内容缺失")
+		w.Write([]byte("{status:'1003'  }"))
+		return
+	}
+	str := fmt.Sprintf("mopedid=%s&tagid=%s&tagphyno=%s&mopedstate=%s&key=%s", mopedid, tagid, tagphyno, mopedstate, md5key)
+	if cmp_md5(str, sign) != true {
+		glog.V(3).Infoln("sign验证失败")
+		w.Write([]byte("{status:'1002' }"))
+		return
+	}
+
+	db := opendb()
+	if db == nil {
+		glog.V(3).Infoln("系统繁忙，稍后再试")
+		w.Write([]byte("{status:'-1'}"))
+		return
+	} else {
+		defer db.Close()
+	}
+	var statusret STATUSRET
+	var sql string
+
+	if mopedstate == "0" {
+		// //重制证---车辆未发过卡
+		sql = `SELECT * from tag_tb where tag_tagid = "%s"  and (tag_state = 1 or tag_state = 2 or tag_state = 3)` //1未发卡，2已发卡3挂失4注销
+		sql = fmt.Sprintf(sql, tagid)
+		res, err := db.Start(sql)
+		if err != nil {
+			statusret.Status = "1000"
+			glog.V(3).Infoln("select from tag_tb处理失败")
+			w.Write([]byte("{status:'1000'}"))
+			return
+		}
+		row, err := res.GetRow()
+		if err != nil {
+			statusret.Status = "1000"
+			glog.V(3).Infoln("tag_tb getrow()处理失败")
+			w.Write([]byte("{status:'1000' }"))
+			return
+		}
+
+		if row != nil {
+			statusret.Status = "1000"
+			glog.V(3).Infoln("此卡数据库中已经存在")
+			w.Write([]byte("{status:'1000' }"))
+			return
+		}
+
+		_, err = db.Start("begin")
+		sql = ` insert into tag_tb(tag_tagid,tag_phyno,tag_state) values("%s","%s",2) `
+		sql = fmt.Sprintf(sql, tagid, tagphyno)
+		_, err = db.Start(sql)
+		if err != nil {
+			statusret.Status = "1000"
+			glog.V(3).Infoln("into tag_tb处理失败")
+			w.Write([]byte("{status:'1000'}"))
+			return
+		} else {
+
+			statusret.Status = "1" //处理成功
+		}
+
+		sql = ` insert into mopedtag_tb(moped_id,tag_id,mopedtag_datetime,mopedtag_state)
+		select %s ,  tag_id ,"%s" , 1 from tag_tb where tag_tagid = "%s"  `
+		sql = fmt.Sprintf(sql, mopedid, time.Now().Format("2006-01-02 15:04:05"), tagid)
+		_, err = db.Start(sql)
+		if err != nil {
+			statusret.Status = "1000"
+			glog.V(3).Infoln("into mopedtag_tb处理失败")
+			w.Write([]byte("{status:'1000'}"))
+			db.Start("rollback")
+			return
+		} else {
+
+			statusret.Status = "1" //处理成功
+		}
+
+		sql = ` update moped_tb set moped_state = 2 where moped_id = %s `
+		sql = fmt.Sprintf(sql, mopedid)
+		_, err = db.Start(sql)
+		if err != nil {
+			statusret.Status = "1000"
+			glog.V(3).Infoln("update moped_tb处理失败")
+			w.Write([]byte("{status:'1000'}"))
+			db.Start("rollback")
+			return
+		} else {
+
+			statusret.Status = "1" //处理成功
+			db.Start("commit")
+		}
+
+	} else {
+
+		// //重制证---车辆已经发过卡
+		sql = `SELECT * from tag_tb where tag_tagid = "%s"  and (tag_state = 1 or tag_state = 2 or tag_state = 3)` //1未发卡，2已发卡3挂失4注销
+		sql = fmt.Sprintf(sql, tagid)
+		res, err := db.Start(sql)
+		if err != nil {
+			statusret.Status = "1000"
+			glog.V(3).Infoln("select from tag_tb处理失败")
+			w.Write([]byte("{status:'1000'}"))
+			return
+		}
+		row, err := res.GetRow()
+		if err != nil {
+			statusret.Status = "1000"
+			glog.V(3).Infoln("tag_tb getrow()处理失败")
+			w.Write([]byte("{status:'1000' }"))
+			return
+		}
+
+		if row != nil {
+			statusret.Status = "1000"
+			glog.V(3).Infoln("此卡数据库中已经存在")
+			w.Write([]byte("{status:'1000' }"))
+			return
+		}
+
+		_, err = db.Start("begin")
+		sql = ` insert into tag_tb(tag_tagid,tag_phyno,tag_state) values("%s","%s",2) `
+		sql = fmt.Sprintf(sql, tagid, tagphyno)
+		_, err = db.Start(sql)
+		if err != nil {
+			statusret.Status = "1000"
+			glog.V(3).Infoln("into tag_tb处理失败")
+			w.Write([]byte("{status:'1000'}"))
+			return
+		} else {
+
+			statusret.Status = "1" //处理成功
+		}
+
+		sql = ` update tag_tb set tag_state = 1 where tag_id = (SELECT tag_tb.tag_id FROM tag_tb 
+inner join mopedtag_tb on mopedtag_tb.tag_id=tag_tb.tag_id
+inner join moped_tb on moped_tb.moped_id=mopedtag_tb.moped_id
+WHERE (moped_tb.moped_id = %s) and (moped_state = 2) and (mopedtag_tb.mopedtag_state = 1) order by tag_tb.tag_id) `
+
+		sql = fmt.Sprintf(sql, mopedid)
+		_, err = db.Start(sql)
+		if err != nil {
+			statusret.Status = "1000"
+			glog.V(3).Infoln("update tag_tb处理失败")
+			w.Write([]byte("{status:'1000'}"))
+			db.Start("rollback")
+			return
+		} else {
+
+			statusret.Status = "1" //处理成功
+		}
+
+		sql = ` update mopedtag_tb set mopedtag_state = 0 where (moped_id = %s) and (tag_id =
+		(SELECT tag_tb.tag_id FROM tag_tb 
+inner join mopedtag_tb on mopedtag_tb.tag_id=tag_tb.tag_id
+inner join moped_tb on moped_tb.moped_id=mopedtag_tb.moped_id
+WHERE (moped_tb.moped_id = %s) and (moped_state = 2) and (mopedtag_tb.mopedtag_state = 1) order by tag_tb.tag_id))   `
+		sql = fmt.Sprintf(sql, mopedid, mopedid)
+		_, err = db.Start(sql)
+		if err != nil {
+			statusret.Status = "1000"
+			glog.V(3).Infoln("update mopedtag_tb处理失败")
+			w.Write([]byte("{status:'1000'}"))
+			db.Start("rollback")
+			return
+		} else {
+
+			statusret.Status = "1" //处理成功
+
+		}
+
+		sql = `insert into mopedtag_tb(moped_id,tag_id,mopedtag_datetime,mopedtag_state)
+		values(%s,%s,"%s",1)";   `
+		sql = fmt.Sprintf(sql, mopedid, tagid, time.Now().Format("2006-01-02 15:04:05"))
+		_, err = db.Start(sql)
+		if err != nil {
+			statusret.Status = "1000"
+			glog.V(3).Infoln("into mopedtag_tb处理失败")
+			w.Write([]byte("{status:'1000'}"))
+			db.Start("rollback")
+			return
+		} else {
+
+			statusret.Status = "1" //处理成功
+			db.Start("commit")
+
+		}
+
+	}
 }
 func jcomein(w http.ResponseWriter, r *http.Request) { /*    */
 	r.ParseForm()
