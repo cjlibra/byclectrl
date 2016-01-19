@@ -865,7 +865,7 @@ func getMopedBynameOrHphm(w http.ResponseWriter, r *http.Request) { /* http://20
 		w.Write([]byte("{status:'1003'  }"))
 		return
 	}
-	if len(hphm) <= 0 || len(ownername) <= 0 || len(sign) <= 0 {
+	if (len(hphm) <= 0 && len(ownername) <= 0) || len(sign) <= 0 {
 		glog.V(3).Infoln("请求参数内容缺失")
 		w.Write([]byte("{status:'1003'  }"))
 		return
@@ -895,8 +895,9 @@ func getMopedBynameOrHphm(w http.ResponseWriter, r *http.Request) { /* http://20
 			JOIN  dicword_tb  AS type1_tb  ON  type1_tb.dicword_dictypeid = 6 AND moped_tb.moped_type = type1_tb.dicword_wordid 
 			JOIN   dicword_tb  AS color1_tb  ON   color1_tb.dicword_dictypeid = 7
 			 AND moped_tb.moped_colorid = color1_tb.dicword_wordid  
-			WHERE moped_tb.moped_hphm = "%s" and owner_tb.owner_name = "%s" and (owner_tb.owner_state = 1) order by owner_tb.owner_id `
-	sql = fmt.Sprintf(sql, hphm, ownername)
+			WHERE moped_tb.moped_hphm like "%s%s%s" and owner_tb.owner_name like "%s%s%s" and (owner_tb.owner_state = 1) order by owner_tb.owner_id `
+	sql = fmt.Sprintf(sql, "%", hphm, "%", "%", ownername, "%")
+	fmt.Println(sql)
 	//glog.V(3).Infoln(sql)
 
 	res, err := db.Start(sql)
