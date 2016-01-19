@@ -358,9 +358,9 @@ func area_func(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.25
 	}
 	var sql string
 	if areaid == "-1" {
-		sql = "select area_id ,area_name from area_tb"
+		sql = "select area_id ,area_name from area_tb  where (area_state = 1) order by area_id"
 	} else {
-		sql = "select area_id ,area_name from area_tb where area_id = " + areaid
+		sql = "select area_id ,area_name from area_tb where area_id = " + areaid + " and (area_state = 1) order by area_id"
 	}
 	res, err := db.Start(sql)
 	var areadata AREADATA
@@ -895,7 +895,7 @@ func getMopedBynameOrHphm(w http.ResponseWriter, r *http.Request) { /* http://20
 			JOIN  dicword_tb  AS type1_tb  ON  type1_tb.dicword_dictypeid = 6 AND moped_tb.moped_type = type1_tb.dicword_wordid 
 			JOIN   dicword_tb  AS color1_tb  ON   color1_tb.dicword_dictypeid = 7
 			 AND moped_tb.moped_colorid = color1_tb.dicword_wordid  
-			WHERE moped_tb.moped_hphm = "%s" and owner_tb.owner_name = "%s"`
+			WHERE moped_tb.moped_hphm = "%s" and owner_tb.owner_name = "%s" and (owner_tb.owner_state = 1) order by owner_tb.owner_id `
 	sql = fmt.Sprintf(sql, hphm, ownername)
 	//glog.V(3).Infoln(sql)
 
