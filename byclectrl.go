@@ -1154,7 +1154,7 @@ func updateState(w http.ResponseWriter, r *http.Request) { /*    http://202.127.
 func repeatISssue(w http.ResponseWriter, r *http.Request) { /*  http://202.127.26.252/XXX/repeatISssue  */
 	r.ParseForm()
 	mopedid := r.FormValue("mopedid")
-	tagid := r.FormValue("tagid")
+	stagid := r.FormValue("tagid")
 	tagphyno := r.FormValue("tagphyno")
 	mopedstate := r.FormValue("mopedstate")
 	sign := r.FormValue("sign")
@@ -1164,12 +1164,12 @@ func repeatISssue(w http.ResponseWriter, r *http.Request) { /*  http://202.127.2
 		w.Write([]byte("{status:'1003'  }"))
 		return
 	}
-	if len(mopedid) <= 0 || len(tagid) <= 0 || len(tagphyno) <= 0 || len(mopedstate) <= 0 || len(sign) <= 0 {
+	if len(mopedid) <= 0 || len(stagid) <= 0 || len(tagphyno) <= 0 || len(mopedstate) <= 0 || len(sign) <= 0 {
 		glog.V(3).Infoln("请求参数内容缺失")
 		w.Write([]byte("{status:'1003'  }"))
 		return
 	}
-	str := fmt.Sprintf("mopedid=%s&tagid=%s&tagphyno=%s&mopedstate=%s&key=%s", mopedid, tagid, tagphyno, mopedstate, md5key)
+	str := fmt.Sprintf("mopedid=%s&tagid=%s&tagphyno=%s&mopedstate=%s&key=%s", mopedid, stagid, tagphyno, mopedstate, md5key)
 	if cmp_md5(str, sign) != true {
 		glog.V(3).Infoln("sign验证失败")
 		w.Write([]byte("{status:'1002' }"))
@@ -1190,7 +1190,7 @@ func repeatISssue(w http.ResponseWriter, r *http.Request) { /*  http://202.127.2
 	if mopedstate == "0" {
 		// //重制证---车辆未发过卡
 		sql = `SELECT * from tag_tb where tag_tagid = "%s"  and (tag_state = 1 or tag_state = 2 or tag_state = 3)` //1未发卡，2已发卡3挂失4注销
-		sql = fmt.Sprintf(sql, tagid)
+		sql = fmt.Sprintf(sql, stagid)
 		res, err := db.Start(sql)
 		if err != nil {
 			statusret.Status = "1000"
@@ -1215,7 +1215,7 @@ func repeatISssue(w http.ResponseWriter, r *http.Request) { /*  http://202.127.2
 
 		_, err = db.Start("begin")
 		sql = ` insert into tag_tb(tag_tagid,tag_phyno,tag_state) values("%s","%s",2) `
-		sql = fmt.Sprintf(sql, tagid, tagphyno)
+		sql = fmt.Sprintf(sql, stagid, tagphyno)
 		_, err = db.Start(sql)
 		if err != nil {
 			statusret.Status = "1000"
@@ -1229,7 +1229,7 @@ func repeatISssue(w http.ResponseWriter, r *http.Request) { /*  http://202.127.2
 
 		sql = ` insert into mopedtag_tb(moped_id,tag_id,mopedtag_datetime,mopedtag_state)
 		select %s ,  tag_id ,"%s" , 1 from tag_tb where tag_tagid = "%s"  `
-		sql = fmt.Sprintf(sql, mopedid, time.Now().Format("2006-01-02 15:04:05"), tagid)
+		sql = fmt.Sprintf(sql, mopedid, time.Now().Format("2006-01-02 15:04:05"), stagid)
 		_, err = db.Start(sql)
 		if err != nil {
 			statusret.Status = "1000"
@@ -1261,7 +1261,7 @@ func repeatISssue(w http.ResponseWriter, r *http.Request) { /*  http://202.127.2
 
 		// //重制证---车辆已经发过卡
 		sql = `SELECT * from tag_tb where tag_tagid = "%s"  and (tag_state = 1 or tag_state = 2 or tag_state = 3)` //1未发卡，2已发卡3挂失4注销
-		sql = fmt.Sprintf(sql, tagid)
+		sql = fmt.Sprintf(sql, stagid)
 		res, err := db.Start(sql)
 		if err != nil {
 			statusret.Status = "1000"
@@ -1284,7 +1284,7 @@ func repeatISssue(w http.ResponseWriter, r *http.Request) { /*  http://202.127.2
 			return
 		}
 
-		var strtag_id string
+		var soldindex_tag_id string
 		sql = ` SELECT tag_tb.tag_id FROM tag_tb 
 inner join mopedtag_tb on mopedtag_tb.tag_id = tag_tb.tag_id
 inner join moped_tb on moped_tb.moped_id = mopedtag_tb.moped_id
@@ -1311,24 +1311,25 @@ WHERE (moped_tb.moped_id = %s) and (moped_tb.moped_state = 2) and (mopedtag_tb.m
 
 			if row == nil {
 				// No more rows
-				glog.V(3).Infoln("没有找到此张卡，处理失败")
+				glog.V(3).Infoln("与车辆捆绑的卡没有找到此张卡，处理失败")
 				w.Write([]byte("{status:'1000'  }"))
 				return
 			}
 
-			strtag_id = row.Str(res.Map("tag_id"))
+			soldindex_tag_id = row.Str(res.Map("tag_id"))
 
 		}
-
-		//_, _, err = db.Query("begin")
-		_, err = db.Begin()
+		res.End()
+		_, err = db.Start("begin")
+		//_, err = db.Begin()
 		sql = ` insert into tag_tb(tag_tagid,tag_phyno,tag_state) values("%s","%s",2) `
-		sql = fmt.Sprintf(sql, tagid, tagphyno)
+		sql = fmt.Sprintf(sql, stagid, tagphyno)
 
-		_, _, err = db.Query(sql)
+		_, err = db.Start(sql)
 		if err != nil {
 			statusret.Status = "1000"
 			glog.V(3).Infoln("into tag_tb处理失败")
+			glog.V(3).Infoln(err)
 			w.Write([]byte("{status:'1000'}"))
 			return
 		} else {
@@ -1337,8 +1338,9 @@ WHERE (moped_tb.moped_id = %s) and (moped_tb.moped_state = 2) and (mopedtag_tb.m
 		}
 
 		sql = ` update tag_tb set tag_state = 1 where tag_id = %s `
+		//更新tag_tb中旧卡对应的tag_state =1
 
-		sql = fmt.Sprintf(sql, strtag_id)
+		sql = fmt.Sprintf(sql, soldindex_tag_id)
 
 		_, err = db.Start(sql)
 		if err != nil {
@@ -1353,7 +1355,8 @@ WHERE (moped_tb.moped_id = %s) and (moped_tb.moped_state = 2) and (mopedtag_tb.m
 		}
 
 		sql = ` update mopedtag_tb set mopedtag_state = 0 where (moped_id = %s) and (tag_id =%s ) `
-		sql = fmt.Sprintf(sql, mopedid, strtag_id)
+		//解除新mopedtag_tb中和旧卡的绑定mopedtag_state = 0
+		sql = fmt.Sprintf(sql, mopedid, soldindex_tag_id)
 		_, err = db.Start(sql)
 		if err != nil {
 			statusret.Status = "1000"
@@ -1367,9 +1370,12 @@ WHERE (moped_tb.moped_id = %s) and (moped_tb.moped_state = 2) and (mopedtag_tb.m
 
 		}
 
-		sql = `insert into mopedtag_tb(moped_id,tag_id,mopedtag_datetime,mopedtag_state)
-		values(%s,%s,"%s",1) `
-		sql = fmt.Sprintf(sql, mopedid, tagid, time.Now().Format("2006-01-02 15:04:05"))
+		sql = `insert into mopedtag_tb(moped_id,tag_id,mopedtag_datetime,mopedtag_state)  
+		select %s,tag_tb.tag_id,"%s",1 from tag_tb where tag_tb.tag_tagid = "%s"
+		and tag_tb.tag_phyno = "%s" and tag_tb.tag_state  = 2 `
+
+		sql = fmt.Sprintf(sql, mopedid, time.Now().Format("2006-01-02 15:04:05"), stagid, tagphyno)
+		//fmt.Println(sql)
 		_, err = db.Start(sql)
 		if err != nil {
 			statusret.Status = "1000"
