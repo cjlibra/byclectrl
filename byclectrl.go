@@ -840,13 +840,14 @@ WHERE  mopedtag_tb.moped_id = (SELECT moped_tb.moped_id FROM moped_tb WHERE mope
 }
 
 type MOPEDBYNAMEARRAY struct {
-	Areaname  string `json:"areaname"`  //区域名称
-	Hphm      string `json:"hphm"`      //车牌号码
-	Typetype  string `json:"type"`      //=> 车辆品牌
-	Color     string `json:"color"`     // => 车辆颜色
-	Name      string `json:"name"`      //=> 车主姓名
-	Moped_id  string `json:"moped_id"`  // 表编号
-	Tag_tagid string `json:"tag_tagid"` // 标签ID
+	Areaname    string `json:"areaname"`    //区域名称
+	Hphm        string `json:"hphm"`        //车牌号码
+	Typetype    string `json:"type"`        //=> 车辆品牌
+	Color       string `json:"color"`       // => 车辆颜色
+	Name        string `json:"name"`        //=> 车主姓名
+	Moped_id    string `json:"moped_id"`    // 表编号
+	Tag_tagid   string `json:"tag_tagid"`   // 标签ID
+	Moped_state string `json:"moped_state"` //moped状态
 }
 
 type MOPEDBYNAMERET struct {
@@ -865,7 +866,7 @@ func getMopedBynameOrHphm(w http.ResponseWriter, r *http.Request) { /* http://20
 		w.Write([]byte("{status:'1003'  }"))
 		return
 	}
-	if (len(hphm) <= 0 && len(ownername) <= 0) || len(sign) <= 0 {
+	if /* (len(hphm) <= 0 && len(ownername) <= 0) || */ len(sign) <= 0 {
 		glog.V(3).Infoln("请求参数内容缺失")
 		w.Write([]byte("{status:'1003'  }"))
 		return
@@ -887,17 +888,17 @@ func getMopedBynameOrHphm(w http.ResponseWriter, r *http.Request) { /* http://20
 	}
 
 	sql := `select DISTINCT area_tb.area_name , moped_tb.moped_hphm ,type1_tb.dicword_wordname as typetype ,  color1_tb.dicword_wordname , 
-	  owner_tb.owner_name , moped_tb.moped_id , tag_tb.tag_tagid 
+	  owner_tb.owner_name , moped_tb.moped_id , tag_tb.tag_tagid ,moped_tb.moped_state 
 	  FROM owner_tb  JOIN moped_tb JOIN tag_tb   JOIN mopedowner_tb  
-			ON moped_tb.moped_id = moped_tb.moped_id AND  mopedowner_tb.owner_id = owner_tb.owner_id  
+			ON moped_tb.moped_id = mopedowner_tb.moped_id AND  mopedowner_tb.owner_id = owner_tb.owner_id  
 			JOIN mopedtag_tb ON mopedtag_tb.moped_id = moped_tb.moped_id AND mopedtag_tb.tag_id = tag_tb.tag_id  
 			JOIN area_tb ON area_tb.area_id = moped_tb.area_id   
 			JOIN  dicword_tb  AS type1_tb  ON  type1_tb.dicword_dictypeid = 6 AND moped_tb.moped_type = type1_tb.dicword_wordid 
 			JOIN   dicword_tb  AS color1_tb  ON   color1_tb.dicword_dictypeid = 7
 			 AND moped_tb.moped_colorid = color1_tb.dicword_wordid  
-			WHERE moped_tb.moped_hphm like "%s%s%s" and owner_tb.owner_name like "%s%s%s" and (owner_tb.owner_state = 1) order by owner_tb.owner_id `
-	sql = fmt.Sprintf(sql, "%", hphm, "%", "%", ownername, "%")
-	fmt.Println(sql)
+			WHERE moped_tb.moped_hphm like "%%%s%%" and owner_tb.owner_name like "%%%s%%" and (owner_tb.owner_state = 1) order by owner_tb.owner_id `
+	sql = fmt.Sprintf(sql, hphm, ownername)
+	//fmt.Println(sql)
 	//glog.V(3).Infoln(sql)
 
 	res, err := db.Start(sql)
@@ -906,7 +907,7 @@ func getMopedBynameOrHphm(w http.ResponseWriter, r *http.Request) { /* http://20
 	var mopedbynameret MOPEDBYNAMERET
 	if err != nil {
 		glog.V(3).Infoln("处理失败")
-		w.Write([]byte("{status:'1000',data:[] }"))
+		w.Write([]byte("{status:'1000' }"))
 		return
 	} else {
 
@@ -916,7 +917,7 @@ func getMopedBynameOrHphm(w http.ResponseWriter, r *http.Request) { /* http://20
 			row, err := res.GetRow()
 			if err != nil {
 				glog.V(3).Infoln("处理失败")
-				w.Write([]byte("{status:'1000',data:[] }"))
+				w.Write([]byte("{status:'1000' }"))
 				return
 			}
 
@@ -932,6 +933,7 @@ func getMopedBynameOrHphm(w http.ResponseWriter, r *http.Request) { /* http://20
 			mopedbynamedata.Name = row.Str(res.Map("owner_name"))
 			mopedbynamedata.Moped_id = row.Str(res.Map("moped_id"))
 			mopedbynamedata.Tag_tagid = row.Str(res.Map("tag_tagid"))
+			mopedbynamedata.Moped_state = row.Str(res.Map("moped_state"))
 
 			mopedbynamedatas = append(mopedbynamedatas, mopedbynamedata)
 		}
@@ -940,7 +942,7 @@ func getMopedBynameOrHphm(w http.ResponseWriter, r *http.Request) { /* http://20
 	b, err := json.Marshal(mopedbynameret)
 	if err != nil {
 		glog.V(3).Infoln("statusret 转json 出错")
-		w.Write([]byte("{status:1000},data:[] }"))
+		w.Write([]byte("{status:1000} }"))
 		return
 
 	}
@@ -1004,7 +1006,7 @@ func getTagid(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.252
 	var gettagidret GETTAGIDRET
 	if err != nil {
 		glog.V(3).Infoln("处理失败")
-		w.Write([]byte("{status:'1000',data:[] }"))
+		w.Write([]byte("{status:'1000' }"))
 		return
 	} else {
 
@@ -1014,7 +1016,7 @@ func getTagid(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.252
 			row, err := res.GetRow()
 			if err != nil {
 				glog.V(3).Infoln("处理失败")
-				w.Write([]byte("{status:'1000',data:[] }"))
+				w.Write([]byte("{status:'1000' }"))
 				return
 			}
 
@@ -1033,7 +1035,7 @@ func getTagid(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.252
 	b, err := json.Marshal(gettagidret)
 	if err != nil {
 		glog.V(3).Infoln("statusret 转json 出错")
-		w.Write([]byte("{status:1000},data:[] }"))
+		w.Write([]byte("{status:1000} }"))
 		return
 
 	}
@@ -1188,7 +1190,7 @@ func repeatISssue(w http.ResponseWriter, r *http.Request) { /*  http://202.127.2
 	var statusret STATUSRET
 	var sql string
 
-	if mopedstate == "0" {
+	if mopedstate == "1" {
 		// //重制证---车辆未发过卡
 		sql = `SELECT * from tag_tb where tag_tagid = "%s"  and (tag_state = 1 or tag_state = 2 or tag_state = 3)` //1未发卡，2已发卡3挂失4注销
 		sql = fmt.Sprintf(sql, stagid)
