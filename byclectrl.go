@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 	//"crypto/aes"
@@ -207,8 +208,14 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 
 	_, err = db.Start("begin")
 
-	sql = `insert into tag_tb(tag_tagid, tag_state) values("%s",2) `
-	sql = fmt.Sprintf(sql, tagid)
+	sql = `insert into tag_tb(tag_tagid, tag_state ,tag_phyno,tag_datetime) values("%s",2 ,"%d" ,"%s") `
+	i_tagid, err := strconv.ParseInt(tagid, 16, 32)
+	if err != nil {
+		glog.V(3).Infoln("ParseInt(tagid)处理失败")
+		w.Write([]byte("{status:'1000'}"))
+		return
+	}
+	sql = fmt.Sprintf(sql, tagid, i_tagid, time.Now().Format("2006-01-02 15:04:05"))
 	_, err = db.Start(sql)
 	if err != nil {
 		statusret.Status = "1000"
@@ -219,10 +226,11 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 
 		statusret.Status = "1" //处理成功
 	}
-	sql = `insert into moped_tb(moped_hphm,moped_type,moped_pic,moped_vin,moped_colorid,area_id) 
-	     values("%s",%s,"%s","%s",%s,%s) `
-	sql = fmt.Sprintf(sql, hphm, typeid, pic, vin, colorid, areaid)
+	sql = `insert into moped_tb(moped_hphm,moped_type,moped_pic,moped_vin,moped_colorid,area_id,moped_state) 
+	     values("%s",%s,"%s","%s",%s,%s,%s) `
+	sql = fmt.Sprintf(sql, hphm, typeid, pic, vin, colorid, areaid, "2")
 	_, err = db.Start(sql)
+	//glog.V(4).Infoln(sql)
 	if err != nil {
 		statusret.Status = "1000"
 		glog.V(3).Infoln("into moped_tb处理失败")
@@ -237,9 +245,9 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 		statusret.Status = "1" //处理成功
 	}
 
-	sql = `insert into owner_tb(owner_name,owner_phone,owner_address,owner_photo,owner_SID,area_id) 
-	     values("%s","%s","%s","%s","%s",%s) `
-	sql = fmt.Sprintf(sql, name, phone, address, photo, SID, areaid)
+	sql = `insert into owner_tb(owner_name,owner_phone,owner_address,owner_photo,owner_SID,area_id,owner_state) 
+	     values("%s","%s","%s","%s","%s",%s,%s) `
+	sql = fmt.Sprintf(sql, name, phone, address, photo, SID, areaid, "1")
 	_, err = db.Start(sql)
 	if err != nil {
 		statusret.Status = "1000"
@@ -1192,7 +1200,7 @@ func repeatISssue(w http.ResponseWriter, r *http.Request) { /*  http://202.127.2
 
 	if mopedstate == "1" {
 		// //重制证---车辆未发过卡
-		sql = `SELECT * from tag_tb where tag_tagid = "%s"  and (tag_state = 1 or tag_state = 2 or tag_state = 3)` //1未发卡，2已发卡3挂失4注销
+		sql = `SELECT * from tag_tb where tag_tagid = "%s"  and (tag_state = 1 or tag_state = 2 or tag_state = 3 )` //1未发卡，2已发卡3挂失4注销
 		sql = fmt.Sprintf(sql, stagid)
 		res, err := db.Start(sql)
 		if err != nil {
@@ -1215,6 +1223,14 @@ func repeatISssue(w http.ResponseWriter, r *http.Request) { /*  http://202.127.2
 			w.Write([]byte("{status:'1000' }"))
 			return
 		}
+		/*	sql = `delete from  tag_tb where tag_tagid = "%s"  and tag_state = 4 `
+			sql = fmt.Sprintf(sql, stagid)
+			_, err = db.Start(sql)
+			if err != nil {
+				glog.V(3).Infoln("delete tag_state = 4处理失败")
+				w.Write([]byte("{status:'1000'}"))
+				return
+			}*/
 
 		_, err = db.Start("begin")
 		sql = ` insert into tag_tb(tag_tagid,tag_phyno,tag_state) values("%s","%s",2) `
@@ -1231,7 +1247,7 @@ func repeatISssue(w http.ResponseWriter, r *http.Request) { /*  http://202.127.2
 		}
 
 		sql = ` insert into mopedtag_tb(moped_id,tag_id,mopedtag_datetime,mopedtag_state)
-		select %s ,  tag_id ,"%s" , 1 from tag_tb where tag_tagid = "%s"  `
+		select %s ,  tag_id ,"%s" , 1 from tag_tb where tag_tagid = "%s"  and tag_state = 2  `
 		sql = fmt.Sprintf(sql, mopedid, time.Now().Format("2006-01-02 15:04:05"), stagid)
 		_, err = db.Start(sql)
 		if err != nil {
