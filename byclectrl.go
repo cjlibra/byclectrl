@@ -75,14 +75,14 @@ func main() {
 	http.HandleFunc("/jcomein", jcomein)
 	http.Handle("/src/", http.StripPrefix("/src/", http.FileServer(http.Dir("./htmlsrc/"))))
 
-	glog.Info("程序启动，开始监听8080端口")
+	glog.Info("程序启动，开始监听58080端口")
 	defer func() {
 		glog.Infoln("成功退出")
 		glog.Flush()
 	}()
 
 	for {
-		err := http.ListenAndServe(":8080", nil)
+		err := http.ListenAndServe(":58080", nil)
 		if err != nil {
 			//log.Fatal("ListenAndServer: ", err)
 			fmt.Println("ListenAndServer: ", err)
