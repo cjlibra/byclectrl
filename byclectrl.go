@@ -907,7 +907,7 @@ func getMopedBynameOrHphm(w http.ResponseWriter, r *http.Request) { /* http://20
 			JOIN  dicword_tb  AS type1_tb  ON  type1_tb.dicword_dictypeid = 6 AND moped_tb.moped_type = type1_tb.dicword_wordid 
 			JOIN   dicword_tb  AS color1_tb  ON   color1_tb.dicword_dictypeid = 7
 			 AND moped_tb.moped_colorid = color1_tb.dicword_wordid  
-			WHERE moped_tb.moped_hphm like "%%%s%%" and owner_tb.owner_name like "%%%s%%" and (owner_tb.owner_state = 1) order by owner_tb.owner_id `
+			WHERE mopedtag_tb.mopedtag_state = 1 and moped_tb.moped_hphm like "%%%s%%" and owner_tb.owner_name like "%%%s%%" and (owner_tb.owner_state = 1) order by owner_tb.owner_id `
 	sql = fmt.Sprintf(sql, hphm, ownername)
 	//fmt.Println(sql)
 	//glog.V(3).Infoln(sql)
