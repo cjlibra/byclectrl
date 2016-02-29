@@ -1236,8 +1236,8 @@ func repeatISssue(w http.ResponseWriter, r *http.Request) { /*  http://202.127.2
 			}*/
 
 		_, err = db.Start("begin")
-		sql = ` insert into tag_tb(tag_tagid,tag_phyno,tag_state) values("%s","%s",2) `
-		sql = fmt.Sprintf(sql, stagid, tagphyno)
+		sql = ` insert into tag_tb(tag_tagid,tag_phyno,tag_state , tag_datetime) values("%s","%s",2 ,"%s") `
+		sql = fmt.Sprintf(sql, stagid, tagphyno, time.Now().Format("2006-01-02 15:04:05"))
 		_, err = db.Start(sql)
 		if err != nil {
 			statusret.Status = "1000"
@@ -1344,8 +1344,8 @@ WHERE (moped_tb.moped_id = %s) and (moped_tb.moped_state = 2) and (mopedtag_tb.m
 		res.End()
 		_, err = db.Start("begin")
 		//_, err = db.Begin()
-		sql = ` insert into tag_tb(tag_tagid,tag_phyno,tag_state) values("%s","%s",2) `
-		sql = fmt.Sprintf(sql, stagid, tagphyno)
+		sql = ` insert into tag_tb(tag_tagid,tag_phyno,tag_state ,tag_datetime) values("%s","%s",2 ,"%s") `
+		sql = fmt.Sprintf(sql, stagid, tagphyno, time.Now().Format("2006-01-02 15:04:05"))
 
 		_, err = db.Start(sql)
 		if err != nil {
@@ -1472,6 +1472,7 @@ func getTagid2(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.25
 	str := fmt.Sprintf("hphm=%s&key=%s", hphm, md5key)
 	if cmp_md5(str, sign) != true {
 		glog.V(3).Infoln("sign验证失败")
+		glog.V(3).Infoln(str)
 		w.Write([]byte("{status:'1002' }"))
 		return
 	}
