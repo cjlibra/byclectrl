@@ -1011,7 +1011,7 @@ func getTagid(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.252
 	  FROM  moped_tb 
 	  JOIN mopedtag_tb   on moped_tb.moped_id = mopedtag_tb.moped_id 
 	  JOIN tag_tb  	on tag_tb.tag_id = mopedtag_tb.tag_id
-	  WHERE moped_tb.moped_hphm = "%s"  `
+	  WHERE moped_tb.moped_hphm = "%s"  and mopedtag_tb.mopedtag_state = 1 `
 	sql = fmt.Sprintf(sql, hphm)
 	//glog.V(3).Infoln(sql)
 
@@ -1576,7 +1576,7 @@ func getMopedBynameOrHphm2(w http.ResponseWriter, r *http.Request) { /* http://2
 	}
 
 	sql := `select DISTINCT area_tb.area_name , moped_tb.moped_hphm ,type1_tb.dicword_wordname as typetype ,  color1_tb.dicword_wordname , 
-	  owner_tb.owner_name , moped_tb.moped_id , tag_tb.tag_tagid ,moped_tb.moped_state 
+	  owner_tb.owner_name , moped_tb.moped_id  ,moped_tb.moped_state 
 	  FROM owner_tb  JOIN moped_tb JOIN tag_tb   JOIN mopedowner_tb  
 			ON moped_tb.moped_id = mopedowner_tb.moped_id AND  mopedowner_tb.owner_id = owner_tb.owner_id  
 			JOIN mopedtag_tb ON mopedtag_tb.moped_id = moped_tb.moped_id AND mopedtag_tb.tag_id = tag_tb.tag_id  
@@ -1620,7 +1620,7 @@ func getMopedBynameOrHphm2(w http.ResponseWriter, r *http.Request) { /* http://2
 			mopedbynamedata.Color = row.Str(res.Map("dicword_wordname"))
 			mopedbynamedata.Name = row.Str(res.Map("owner_name"))
 			mopedbynamedata.Moped_id = row.Str(res.Map("moped_id"))
-			mopedbynamedata.Tag_tagid = row.Str(res.Map("tag_tagid"))
+			//mopedbynamedata.Tag_tagid = row.Str(res.Map("tag_tagid"))
 			mopedbynamedata.Moped_state = row.Str(res.Map("moped_state"))
 
 			mopedbynamedatas = append(mopedbynamedatas, mopedbynamedata)
