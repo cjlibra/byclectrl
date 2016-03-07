@@ -75,6 +75,8 @@ func main() {
 	http.HandleFunc("/getTagid2", getTagid2)
 	http.HandleFunc("/repeatISssue", repeatISssue)
 	http.HandleFunc("/jcomein", jcomein)
+
+	http.HandleFunc("/maxTagidphyno", maxTagidphyno)
 	http.Handle("/src/", http.StripPrefix("/src/", http.FileServer(http.Dir("./htmlsrc/"))))
 
 	glog.Info("程序启动，开始监听58080端口")
@@ -1160,7 +1162,7 @@ func updateState(w http.ResponseWriter, r *http.Request) { /*    http://202.127.
 	b, err := json.Marshal(statusret)
 	if err != nil {
 		glog.V(3).Infoln("statusret 转json 出错")
-		w.Write([]byte("{status:'1000'}  }"))
+		w.Write([]byte("{status:'1000'} "))
 		return
 
 	}
@@ -1534,7 +1536,7 @@ func getTagid2(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.25
 	b, err := json.Marshal(gettagidret)
 	if err != nil {
 		glog.V(3).Infoln("statusret 转json 出错")
-		w.Write([]byte("{status:1000} }"))
+		w.Write([]byte("{status:'1000'} "))
 		return
 
 	}
@@ -1630,12 +1632,70 @@ func getMopedBynameOrHphm2(w http.ResponseWriter, r *http.Request) { /* http://2
 	b, err := json.Marshal(mopedbynameret)
 	if err != nil {
 		glog.V(3).Infoln("statusret 转json 出错")
-		w.Write([]byte("{status:1000} }"))
+		w.Write([]byte("{status:'1000'} "))
 		return
 
 	}
 
 	glog.V(3).Infoln("获取车辆信息以车牌和用户名列表：成功")
 	w.Write(b)
+
+}
+
+func maxTagidphyno(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.252/XXX/maxTagidphyno   */
+
+	r.ParseForm()
+	sign := r.FormValue("sign")
+
+	if len(r.Form["sign"]) <= 0 {
+		glog.V(3).Infoln("请求参数缺失")
+		w.Write([]byte("{status:'1003'  }"))
+		return
+	}
+	if len(sign) <= 0 {
+		glog.V(3).Infoln("请求参数内容缺失")
+		w.Write([]byte("{status:'1003'  }"))
+		return
+	}
+	str := fmt.Sprintf("key=%s", md5key)
+	if cmp_md5(str, sign) != true {
+		glog.V(3).Infoln("sign验证失败")
+		w.Write([]byte("{status:'1002' }"))
+		return
+	}
+
+	db := opendb()
+	if db == nil {
+		glog.V(3).Infoln("系统繁忙，稍后再试")
+		w.Write([]byte("{status:'-1'}"))
+		return
+	} else {
+		defer db.Close()
+	}
+
+	sql := ` SELECT MAX(tag_phyno) as tag_phyno_max FROM tag_tb `
+	res, err := db.Start(sql)
+
+	if err != nil {
+		glog.V(3).Infoln("处理失败")
+		w.Write([]byte("{status:'1000' }"))
+		return
+	} else {
+
+		row, err := res.GetRow()
+		if err != nil {
+			glog.V(3).Infoln("处理失败")
+			w.Write([]byte("{status:'1000' }"))
+			return
+		}
+
+		tag_phyno := row.Str(res.Map("tag_phyno_max"))
+
+		outstr := "{status:'1' ,tag_phyno: '" + tag_phyno + "'}"
+
+		w.Write([]byte(outstr))
+		glog.V(3).Infoln("获取MAX(tag_phyno)：成功")
+
+	}
 
 }
