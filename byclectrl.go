@@ -31,7 +31,8 @@ var md5key = "ga3trimps"
 
 func opendb() mysql.Conn {
 
-	db := mysql.New("tcp", "", "127.0.0.1:3306", "root", "trimps3393", "mopedmanage")
+	//db := mysql.New("tcp", "", "127.0.0.1:3306", "root", "trimps3393", "mopedmanage")
+	db := mysql.New("tcp", "", "127.0.0.1:3306", "moped", "moped", "mopedmanage")
 
 	err := db.Connect()
 	if err != nil {
@@ -146,6 +147,12 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 		w.Write([]byte("{status:'1003'}"))
 		return
 	}
+	if len(tagid) != 8 {
+		statusret.Status = "1003"
+		glog.V(3).Infoln("tagid格式不对")
+		w.Write([]byte("{status:'1003'}"))
+		return
+	}
 
 	str := fmt.Sprintf("tagid=%s&areaid=%s&hphm=%s&name=%s&key=%s", tagid, areaid, hphm, name, md5key)
 	if cmp_md5(str, sign) != true {
@@ -215,7 +222,7 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 	_, err = db.Start("begin")
 
 	sql = `insert into tag_tb(tag_tagid, tag_state ,tag_phyno,tag_datetime,tag_haskey) values("%s",2 ,"%d" ,"%s" , %s) `
-	i_tagid, err := strconv.ParseInt(tagid, 16, 32)
+	i_tagid, err := strconv.ParseInt(tagid[2:], 16, 32)
 	if err != nil {
 		glog.V(3).Infoln("ParseInt(tagid)处理失败")
 		w.Write([]byte("{status:'1000'}"))
@@ -1642,6 +1649,14 @@ func getMopedBynameOrHphm2(w http.ResponseWriter, r *http.Request) { /* http://2
 
 }
 
+type MAXTAGIDPHYNODATA struct {
+	Tag_phyno string `json:"tag_phyno"`
+}
+type MAXTAGRET struct {
+	Status string              `json:"status"`
+	Data   []MAXTAGIDPHYNODATA `json:"data"`
+}
+
 func maxTagidphyno(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.252/XXX/maxTagidphyno   */
 
 	r.ParseForm()
@@ -1676,26 +1691,44 @@ func maxTagidphyno(w http.ResponseWriter, r *http.Request) { /* http://202.127.2
 	sql := ` SELECT MAX(tag_phyno) as tag_phyno_max FROM tag_tb `
 	res, err := db.Start(sql)
 
+	var maxtagidphynodata MAXTAGIDPHYNODATA
+	var maxtagidphynodatas []MAXTAGIDPHYNODATA
+	var maxtagret MAXTAGRET
+
 	if err != nil {
 		glog.V(3).Infoln("处理失败")
 		w.Write([]byte("{status:'1000' }"))
 		return
 	} else {
+		for {
+			row, err := res.GetRow()
+			if err != nil {
+				glog.V(3).Infoln("处理失败")
+				w.Write([]byte("{status:'1000' }"))
+				return
+			}
 
-		row, err := res.GetRow()
-		if err != nil {
-			glog.V(3).Infoln("处理失败")
-			w.Write([]byte("{status:'1000' }"))
-			return
+			if row == nil {
+				// No more rows
+				break
+			}
+			maxtagidphynodata.Tag_phyno = row.Str(res.Map("tag_phyno_max"))
+
+			maxtagidphynodatas = append(maxtagidphynodatas, maxtagidphynodata)
+
 		}
 
-		tag_phyno := row.Str(res.Map("tag_phyno_max"))
-
-		outstr := "{status:'1' ,tag_phyno: '" + tag_phyno + "'}"
-
-		w.Write([]byte(outstr))
-		glog.V(3).Infoln("获取MAX(tag_phyno)：成功")
+	}
+	maxtagret.Data = maxtagidphynodatas
+	b, err := json.Marshal(maxtagret)
+	if err != nil {
+		glog.V(3).Infoln("statusret 转json 出错")
+		w.Write([]byte("{status:'1000'} "))
+		return
 
 	}
+
+	glog.V(3).Infoln("获取MAX(tag_phyno)：成功")
+	w.Write(b)
 
 }
