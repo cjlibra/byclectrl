@@ -75,9 +75,12 @@ func main() {
 	http.HandleFunc("/getTagid", getTagid)
 	http.HandleFunc("/getTagid2", getTagid2)
 	http.HandleFunc("/repeatISssue", repeatISssue)
+
 	http.HandleFunc("/jcomein", jcomein)
 
 	http.HandleFunc("/maxTagidphyno", maxTagidphyno)
+	http.HandleFunc("/addMopedtype", addMopedtype)
+	http.HandleFunc("/isExistmopedtype", isExistmopedtype)
 	http.Handle("/src/", http.StripPrefix("/src/", http.FileServer(http.Dir("./htmlsrc/"))))
 
 	glog.Info("程序启动，开始监听58080端口")
@@ -117,6 +120,8 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 	SID := r.FormValue("SID")
 	haskey := r.FormValue("haskey")
 	sign := r.FormValue("sign")
+	districtid := r.FormValue("districtid")
+	mopedtypeid2 := r.FormValue("mopedtypeid2")
 
 	var statusret STATUSRET
 
@@ -221,14 +226,14 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 
 	_, err = db.Start("begin")
 
-	sql = `insert into tag_tb(tag_tagid, tag_state ,tag_phyno,tag_datetime,tag_haskey) values("%s",2 ,"%d" ,"%s" , %s) `
+	sql = `insert into tag_tb(tag_tagid, tag_state ,tag_phyno,tag_datetime,tag_haskey,district_id) values("%s",2 ,"%d" ,"%s" , %s, %s) `
 	i_tagid, err := strconv.ParseInt(tagid[2:], 16, 32)
 	if err != nil {
 		glog.V(3).Infoln("ParseInt(tagid)处理失败")
 		w.Write([]byte("{status:'1000'}"))
 		return
 	}
-	sql = fmt.Sprintf(sql, tagid, i_tagid, time.Now().Format("2006-01-02 15:04:05"), haskey)
+	sql = fmt.Sprintf(sql, tagid, i_tagid, time.Now().Format("2006-01-02 15:04:05"), haskey, districtid)
 	_, err = db.Start(sql)
 	if err != nil {
 		statusret.Status = "1000"
@@ -239,9 +244,9 @@ func mopedtagissue(w http.ResponseWriter, r *http.Request) { /*http://202.127.26
 
 		statusret.Status = "1" //处理成功
 	}
-	sql = `insert into moped_tb(moped_hphm,moped_type,moped_pic,moped_vin,moped_colorid,area_id,moped_state) 
-	     values("%s",%s,"%s","%s",%s,%s,%s) `
-	sql = fmt.Sprintf(sql, hphm, typeid, pic, vin, colorid, areaid, "2")
+	sql = `insert into moped_tb(moped_hphm,moped_type,moped_pic,moped_vin,moped_colorid,area_id,moped_state,district_id,moped_mopedtype) 
+	     values("%s",%s,"%s","%s",%s,%s,%s,%s,%s) `
+	sql = fmt.Sprintf(sql, hphm, typeid, pic, vin, colorid, areaid, "2", districtid, mopedtypeid2)
 	_, err = db.Start(sql)
 	//glog.V(4).Infoln(sql)
 	if err != nil {
@@ -1730,5 +1735,171 @@ func maxTagidphyno(w http.ResponseWriter, r *http.Request) { /* http://202.127.2
 
 	glog.V(3).Infoln("获取MAX(tag_phyno)：成功")
 	w.Write(b)
+
+}
+
+func addMopedtype(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.252/XXX/addMopedtype   */
+	r.ParseForm()
+	newmopedType := r.FormValue("newmopedType")
+	sign := r.FormValue("sign")
+	if len(r.Form["sign"]) <= 0 {
+		glog.V(3).Infoln("sign请求参数缺失")
+		w.Write([]byte("{status:'1003'  }"))
+		return
+	}
+	if len(sign) <= 0 {
+		glog.V(3).Infoln("sign请求参数内容缺失")
+		w.Write([]byte("{status:'1003'  }"))
+		return
+	}
+
+	if len(r.Form["newmopedType"]) <= 0 {
+		glog.V(3).Infoln("newmopedType请求参数缺失")
+		w.Write([]byte("{status:'1003'  }"))
+		return
+	}
+	if len(newmopedType) <= 0 {
+		glog.V(3).Infoln("newmopedType请求参数内容缺失")
+		w.Write([]byte("{status:'1003'  }"))
+		return
+	}
+	str := fmt.Sprintf("newmopedType=%s&key=%s", newmopedType, md5key)
+	if cmp_md5(str, sign) != true {
+		glog.V(3).Infoln("sign验证失败")
+		w.Write([]byte("{status:'1002' }"))
+		return
+	}
+
+	db := opendb()
+	if db == nil {
+		glog.V(3).Infoln("系统繁忙，稍后再试")
+		w.Write([]byte("{status:'-1'}"))
+		return
+	} else {
+		defer db.Close()
+	}
+
+	sql := "SELECT * from dicword_tb where dicword_wordname = '" + newmopedType + "' and dicword_dictypeid = 6 and dicword_state = 1" //6代表车辆品牌                  `
+	res, err := db.Start(sql)
+
+	if err != nil {
+		glog.V(3).Infoln("处理失败")
+		w.Write([]byte("{status:'1000' }"))
+		return
+	} else {
+
+		row, err := res.GetRow()
+		if err != nil {
+			glog.V(3).Infoln("处理失败")
+			w.Write([]byte("{status:'1000' }"))
+			return
+		}
+
+		if row == nil {
+			// 没有新车牌,可以插入
+			sql = "SELECT MAX(dicword_wordid) as maxvalue from dicword_tb where dicword_dictypeid = 6 and dicword_state = 1" //6代表车辆品牌
+			res, err = db.Start(sql)
+			if err != nil {
+				glog.V(3).Infoln("处理失败")
+				w.Write([]byte("{status:'1000' }"))
+				return
+			}
+			row, err := res.GetRow()
+			if err != nil {
+				glog.V(3).Infoln("MAX(dicword_wordid)处理失败")
+				w.Write([]byte("{status:'1000' }"))
+				return
+			}
+
+			if row == nil {
+				// No more rows
+				glog.V(3).Infoln("no maxvalue处理失败")
+				w.Write([]byte("{status:'1000' }"))
+				return
+			}
+			maxvalue := row.Int(res.Map("maxvalue"))
+			dicwwordidNew := maxvalue + 1
+			str_dicwwordidNew := fmt.Sprintf("%d", dicwwordidNew)
+			sql = "insert into dicword_tb(dicword_dictypeid,dicword_wordid,dicword_wordname,dicword_state) values(6," + str_dicwwordidNew + ",'" + newmopedType + "',1) "
+			res, err = db.Start(sql)
+			if err != nil {
+				glog.V(3).Infoln("insert into dicword_tb处理失败")
+				w.Write([]byte("{status:'1000' }"))
+				return
+			}
+			w.Write([]byte("{status:'1'}"))
+		} else {
+			w.Write([]byte("{status:'-2'}"))
+
+		}
+
+	}
+
+}
+
+func isExistmopedtype(w http.ResponseWriter, r *http.Request) { /* http://202.127.26.252/XXX/isExistmopedtype   */
+	r.ParseForm()
+	newmopedType := r.FormValue("newmopedType")
+	sign := r.FormValue("sign")
+	if len(r.Form["sign"]) <= 0 {
+		glog.V(3).Infoln("sign请求参数缺失")
+		w.Write([]byte("{status:'1003'  }"))
+		return
+	}
+	if len(sign) <= 0 {
+		glog.V(3).Infoln("sign请求参数内容缺失")
+		w.Write([]byte("{status:'1003'  }"))
+		return
+	}
+
+	if len(r.Form["newmopedType"]) <= 0 {
+		glog.V(3).Infoln("newmopedType请求参数缺失")
+		w.Write([]byte("{status:'1003'  }"))
+		return
+	}
+	if len(newmopedType) <= 0 {
+		glog.V(3).Infoln("newmopedType请求参数内容缺失")
+		w.Write([]byte("{status:'1003'  }"))
+		return
+	}
+	str := fmt.Sprintf("newmopedType=%s&key=%s", newmopedType, md5key)
+	if cmp_md5(str, sign) != true {
+		glog.V(3).Infoln("sign验证失败")
+		w.Write([]byte("{status:'1002' }"))
+		return
+	}
+
+	db := opendb()
+	if db == nil {
+		glog.V(3).Infoln("系统繁忙，稍后再试")
+		w.Write([]byte("{status:'-1'}"))
+		return
+	} else {
+		defer db.Close()
+	}
+
+	sql := "SELECT * FROM dicword_tb WHERE dicword_dictypeid = 6 and dicword_wordname =  '" + newmopedType + "' and dicword_state = 1"
+	res, err := db.Start(sql)
+
+	if err != nil {
+		glog.V(3).Infoln("SELECT * FROM dicword_tb处理失败")
+		w.Write([]byte("{status:'1000' }"))
+		return
+	} else {
+
+		row, err := res.GetRow()
+		if err != nil {
+			glog.V(3).Infoln("dicword_tb getrow处理失败")
+			w.Write([]byte("{status:'1000' }"))
+			return
+		}
+
+		if row == nil {
+			w.Write([]byte("{status:'1'}"))
+		} else {
+			w.Write([]byte("{status:'-1'}"))
+		}
+
+	}
 
 }
