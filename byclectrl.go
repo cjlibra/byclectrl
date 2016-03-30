@@ -31,8 +31,8 @@ var md5key = "ga3trimps"
 
 func opendb() mysql.Conn {
 
-	//db := mysql.New("tcp", "", "127.0.0.1:3306", "root", "trimps3393", "mopedmanage")
-	db := mysql.New("tcp", "", "127.0.0.1:3306", "moped", "moped", "mopedmanage")
+	db := mysql.New("tcp", "", "127.0.0.1:3306", "root", "trimps3393", "mopedmanage")
+	//db := mysql.New("tcp", "", "127.0.0.1:3306", "moped", "moped", "mopedmanage")
 
 	err := db.Connect()
 	if err != nil {
@@ -485,6 +485,8 @@ func type_func(w http.ResponseWriter, r *http.Request) { /*  http://202.127.26.2
 	} else {
 		sql = "select dicword_wordid , dicword_wordname FROM dicword_tb where dicword_dictypeid = 6 and dicword_wordid = " + typeid
 	}
+	sql = "SELECT    dicword_wordid,dicword_wordname FROM dicword_tb  WHERE     (dicword_state = 1) and dicword_dictypeid = " + typeid + " order by dicword_wordid"
+
 	res, err := db.Start(sql)
 	var typedata TYPEARRAY
 	var typedatas []TYPEARRAY
@@ -1820,7 +1822,9 @@ func addMopedtype(w http.ResponseWriter, r *http.Request) { /* http://202.127.26
 			maxvalue := row.Int(res.Map("maxvalue"))
 			dicwwordidNew := maxvalue + 1
 			str_dicwwordidNew := fmt.Sprintf("%d", dicwwordidNew)
+			res.End()
 			sql = "insert into dicword_tb(dicword_dictypeid,dicword_wordid,dicword_wordname,dicword_state) values(6," + str_dicwwordidNew + ",'" + newmopedType + "',1) "
+			//fmt.Println(sql)
 			res, err = db.Start(sql)
 			if err != nil {
 				glog.V(3).Infoln("insert into dicword_tb处理失败")

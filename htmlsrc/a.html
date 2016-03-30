@@ -20,6 +20,9 @@
   <p>address: <input type="text" name="address" /></p>
   <p>photo: <input type="text" name="photo" /></p>
   <p>SID: <input type="text" name="SID" /></p>
+
+   <p>districtid: <input type="text" name="districtid" /></p>
+    <p>mopedtypeid2: <input type="text" name="mopedtypeid2" /></p>
   <p>haskey: <input type="text" name="haskey" /></p>
   <p>sign: <input type="text" name="sign" /></p>
   <input type="submit" value="Submit" />
@@ -151,6 +154,22 @@
 13  http://202.127.26.252/XXX/maxTagidphyno
 <form action="/maxTagidphyno" method="post">
   
+  <p>sign: <input type="text" name="sign" /></p>
+  <input type="submit" value="Submit" />
+</form>
+
+<hr>
+14  http://202.127.26.252/XXX/addMopedtype
+<form action="/addMopedtype" method="post">
+  
+  <p>newmopedType: <input type="text" name="newmopedType" /></p>
+  <p>sign: <input type="text" name="sign" /></p>
+  <input type="submit" value="Submit" />
+</form>
+<hr>
+15  http://202.127.26.252/XXX/isExistmopedtype
+<form action="/isExistmopedtype" method="post">
+ <p>newmopedType: <input type="text" name="newmopedType" /></p> 
   <p>sign: <input type="text" name="sign" /></p>
   <input type="submit" value="Submit" />
 </form>
