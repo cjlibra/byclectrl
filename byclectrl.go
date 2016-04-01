@@ -1899,9 +1899,9 @@ func isExistmopedtype(w http.ResponseWriter, r *http.Request) { /* http://202.12
 		}
 
 		if row == nil {
-			w.Write([]byte("{status:'1'}"))
+			w.Write([]byte("{status:'1',data:'0' }"))
 		} else {
-			w.Write([]byte("{status:'-1'}"))
+			w.Write([]byte("{status:'1' ,data:'1'　}"))
 		}
 
 	}
