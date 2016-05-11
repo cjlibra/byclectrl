@@ -31,8 +31,9 @@ var md5key = "ga3trimps"
 
 func opendb() mysql.Conn {
 
-	db := mysql.New("tcp", "", "127.0.0.1:3306", "root", "trimps3393", "mopedmanage")
+	//db := mysql.New("tcp", "", "127.0.0.1:3306", "root", "trimps3393", "mopedmanage")
 	//db := mysql.New("tcp", "", "127.0.0.1:3306", "moped", "moped", "mopedmanage")
+	db := mysql.New("tcp", "", "202.127.26.252:3306", "moped", "moped", "mopedmanage")
 
 	err := db.Connect()
 	if err != nil {
@@ -927,8 +928,9 @@ func getMopedBynameOrHphm(w http.ResponseWriter, r *http.Request) { /* http://20
 			JOIN   dicword_tb  AS color1_tb  ON   color1_tb.dicword_dictypeid = 7
 			 AND moped_tb.moped_colorid = color1_tb.dicword_wordid  
 			WHERE mopedtag_tb.mopedtag_state = 1 and moped_tb.moped_hphm like "%%%s%%" and owner_tb.owner_name like "%%%s%%" and (owner_tb.owner_state = 1) order by owner_tb.owner_id `
+	sql = "CALL getMopedBynameOrHphm1('%s','%s')"
 	sql = fmt.Sprintf(sql, hphm, ownername)
-	//fmt.Println(sql)
+	fmt.Println(sql)
 	//glog.V(3).Infoln(sql)
 
 	res, err := db.Start(sql)
