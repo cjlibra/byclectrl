@@ -63,7 +63,7 @@ func cmp_md5(str string, sig string) bool {
 
 func main() {
 	flag.Parse()
-
+    
 	http.HandleFunc("/mopedtagissue", mopedtagissue)
 	http.HandleFunc("/area", area_func)
 	http.HandleFunc("/type", type_func)
